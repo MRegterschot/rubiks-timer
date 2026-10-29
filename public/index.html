@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body data-state="idle" data-mode="333">
+<body data-state="idle" data-mode="333" data-auth="pending">
   <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 
   <header class="chrome">
@@ -23,14 +23,40 @@
       <button role="tab" data-mode="333">3×3</button>
       <button role="tab" data-mode="bld">Blindfolded</button>
     </nav>
-    <label class="switch only-333">
-      <input type="checkbox" id="inspection">
-      <span class="track"><span class="knob"></span></span>
-      <span class="label">15s inspection</span>
-    </label>
+    <div class="right">
+      <label class="switch only-333">
+        <input type="checkbox" id="inspection">
+        <span class="track"><span class="knob"></span></span>
+        <span class="label">15s inspection</span>
+      </label>
+      <div class="user">
+        <button id="user-btn" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Account"></button>
+        <div id="user-menu" class="user-menu" role="menu">
+          <div class="who">Signed in as <b id="who"></b></div>
+          <button id="logout" role="menuitem">Log out</button>
+        </div>
+      </div>
+    </div>
   </header>
 
-  <main>
+  <section id="auth" class="auth">
+    <form id="auth-form" class="auth-card" novalidate>
+      <div class="logo big" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <h2 class="auth-title">Your solves, every device</h2>
+      <p class="auth-sub">Log in to see your own times. Same account on your phone and laptop.</p>
+      <div class="seg" role="tablist">
+        <button type="button" role="tab" data-auth-mode="login" aria-selected="true">Log in</button>
+        <button type="button" role="tab" data-auth-mode="register" aria-selected="false">Sign up</button>
+      </div>
+      <label class="field"><span>Username</span><input id="auth-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <label class="field reg-only"><span>Invite code</span><input id="auth-invite" name="invite" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+      <p id="auth-error" class="auth-error" role="alert"></p>
+      <button id="auth-submit" class="primary" type="submit">Log in</button>
+    </form>
+  </section>
+
+  <main id="app">
     <div id="scramble" class="chrome" aria-live="polite"></div>
 
     <div class="stage">

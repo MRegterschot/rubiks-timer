@@ -2,6 +2,9 @@ services:
   app:
     build: .
     restart: unless-stopped
+    environment:
+      # Required to sign up; empty means open registration
+      INVITE_CODE: ${INVITE_CODE:-}
     expose:
       - "3000"
     volumes:

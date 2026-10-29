@@ -96,6 +96,7 @@ async function api(method, url, body) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && url.startsWith('/api/solves')) { showAuth(); throw new Error('Logged out'); }
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 }
@@ -302,9 +303,10 @@ function release() {
   }
 }
 
-const typing = () => document.activeElement?.tagName === 'INPUT' && document.activeElement.type === 'text';
+const typing = () => document.activeElement?.tagName === 'INPUT' && ['text', 'password'].includes(document.activeElement.type);
+const authed = () => document.body.dataset.auth === 'in';
 document.addEventListener('keydown', (e) => {
-  if (e.repeat) return;
+  if (e.repeat || !authed()) return;
   if (state === 'running') { e.preventDefault(); press(); return; }
   if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
   if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
@@ -314,7 +316,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'Escape' && state === 'inspecting') { clearInterval(inspectTimer); setState('idle'); timerEl.textContent = '0.00'; }
 });
 document.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' && !typing()) { e.preventDefault(); release(); }
+  if (e.code === 'Space' && authed() && !typing()) { e.preventDefault(); release(); }
 });
 
 // Touch: whole timer area; any touch stops a running timer.
@@ -334,7 +336,7 @@ function setMode(m) {
   solves = [];
   render();
   newScramble();
-  load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
+  if (authed()) load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
 window.addEventListener('hashchange', () => setMode(location.hash === '#bld' ? 'bld' : '333'));
@@ -343,5 +345,56 @@ window.addEventListener('hashchange', () => setMode(location.hash === '#bld' ? '
 $('inspection').checked = localStorage.getItem('inspection') === '1';
 $('inspection').onchange = (e) => localStorage.setItem('inspection', e.target.checked ? '1' : '0');
 
+// ---------- accounts ----------
+let authMode = 'login';
+function setAuthMode(m) {
+  authMode = m;
+  $('auth').dataset.mode = m;
+  document.querySelectorAll('[data-auth-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.authMode === m)));
+  $('auth-submit').textContent = m === 'login' ? 'Log in' : 'Create account';
+  $('auth-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('auth-error').textContent = '';
+}
+function showAuth() {
+  document.body.dataset.auth = 'out';
+  solves = [];
+  setTimeout(() => $('auth-user').focus(), 50);
+}
+function signedIn(user) {
+  document.body.dataset.auth = 'in';
+  $('who').textContent = user.username;
+  $('user-btn').textContent = user.username[0].toUpperCase();
+  $('auth-pass').value = '';
+  $('auth-invite').value = '';
+  setMode(mode);
+}
+document.querySelectorAll('[data-auth-mode]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.authMode); });
+$('auth-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = $('auth-submit');
+  btn.disabled = true;
+  $('auth-error').textContent = '';
+  try {
+    const body = { username: $('auth-user').value.trim(), password: $('auth-pass').value };
+    if (authMode === 'register') body.invite = $('auth-invite').value.trim();
+    const { user } = await api('POST', `/api/${authMode}`, body);
+    signedIn(user);
+  } catch (err) { $('auth-error').textContent = err.message; }
+  btn.disabled = false;
+};
+const toggleMenu = (open) => {
+  $('user-menu').classList.toggle('open', open);
+  $('user-btn').setAttribute('aria-expanded', String(open));
+};
+$('user-btn').onclick = (e) => { e.stopPropagation(); toggleMenu(!$('user-menu').classList.contains('open')); };
+document.addEventListener('click', (e) => { if (!e.target.closest('.user')) toggleMenu(false); });
+$('logout').onclick = async () => {
+  toggleMenu(false);
+  await api('POST', '/api/logout').catch(() => {});
+  clearMemo(); // memo notes are per device; don't leave them for the next person
+  showAuth();
+};
+
 renderMemo();
-setMode(mode);
+setAuthMode('login');
+api('GET', '/api/me').then(({ user }) => signedIn(user)).catch(showAuth);

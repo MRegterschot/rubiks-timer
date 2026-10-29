@@ -1,6 +1,6 @@
 FROM node:24-alpine
 WORKDIR /app
-COPY package.json server.js ./
+COPY package.json server.js reset-password.js ./
 COPY public ./public
 ENV DB_PATH=/app/data/solves.db
 EXPOSE 3000

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#0f1115">
+  <title>Cube Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Cube Timer</h1>
+    <label class="toggle"><input type="checkbox" id="inspection"> 15s inspection</label>
+  </header>
+  <main>
+    <div id="scramble" aria-live="polite"></div>
+    <div id="timer" tabindex="0" role="timer" aria-label="Timer">0.00</div>
+    <div id="hint">Hold space (or touch and hold) until green, release to start</div>
+
+    <section id="stats" class="stats"></section>
+
+    <section class="solves">
+      <div class="solves-head">
+        <h2>Solves</h2>
+        <button id="clear" class="danger">Clear all</button>
+      </div>
+      <ul id="list"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

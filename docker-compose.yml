@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3000"
+    volumes:
+      - rubiks-data:/app/data
+    networks:
+      default:
+      # Stable alias so Nginx Proxy Manager can reach the container by name
+      npm:
+        aliases:
+          - rubiks-timer
+
+volumes:
+  rubiks-data:
+
+networks:
+  npm:
+    external: true
+    name: ${NPM_NETWORK:-nginxproxymanager_default}

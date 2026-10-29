@@ -23,3 +23,7 @@ The service only `expose`s port 3000 (no host port); put a reverse proxy in fron
 ## API
 
 `GET /api/solves`, `POST /api/solves`, `PATCH /api/solves/:id`, `DELETE /api/solves/:id`, `DELETE /api/solves`, `GET /health`.
+
+## Deployment
+
+Pushes to `main` auto-deploy via a GitHub webhook to Coolify, served at https://rubiks.dikkeboktor.nl.

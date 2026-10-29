@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync, readFile } from 'node:fs';
+import { mkdirSync, readFile, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +9,11 @@ const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = resolve(process.env.DB_PATH || './data/solves.db');
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MAX_BODY = 10 * 1024;
+
+// Version asset URLs by content hash so Cloudflare/browser caches never serve stale CSS/JS
+const hashOf = (f) => createHash('sha256').update(readFileSync(join(PUBLIC_DIR, f))).digest('hex').slice(0, 10);
+const INDEX_HTML = Buffer.from(readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf8')
+  .replace(/(href|src)="(style\.css|app\.js)"/g, (_, attr, f) => `${attr}="${f}?v=${hashOf(f)}"`));
 
 mkdirSync(dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -106,14 +112,18 @@ function serveStatic(req, res, path) {
   const file = resolve(PUBLIC_DIR, '.' + rel);
   // Reject anything that resolves outside public/
   if (!file.startsWith(PUBLIC_DIR + sep)) { res.writeHead(403); return res.end('Forbidden'); }
-  readFile(file, (err, data) => {
+  const versioned = new URL(req.url, 'http://localhost').searchParams.has('v');
+  const send = (err, data) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
     res.writeHead(200, {
       'Content-Type': TYPES[extname(file).toLowerCase()] || 'application/octet-stream',
       'Content-Length': data.length,
+      'Cache-Control': versioned ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     res.end(req.method === 'HEAD' ? undefined : data);
-  });
+  };
+  if (file === join(PUBLIC_DIR, 'index.html')) return send(null, INDEX_HTML);
+  readFile(file, send);
 }
 
 const server = http.createServer(async (req, res) => {

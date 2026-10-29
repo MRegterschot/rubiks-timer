@@ -306,7 +306,7 @@ function release() {
 const typing = () => document.activeElement?.tagName === 'INPUT' && ['text', 'password'].includes(document.activeElement.type);
 const authed = () => document.body.dataset.auth === 'in';
 document.addEventListener('keydown', (e) => {
-  if (e.repeat || !authed()) return;
+  if (e.repeat || !authed() || $('invite-dialog').open) return;
   if (state === 'running') { e.preventDefault(); press(); return; }
   if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
   if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
@@ -316,7 +316,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'Escape' && state === 'inspecting') { clearInterval(inspectTimer); setState('idle'); timerEl.textContent = '0.00'; }
 });
 document.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' && authed() && !typing()) { e.preventDefault(); release(); }
+  if (e.code === 'Space' && authed() && !$('invite-dialog').open && !typing()) { e.preventDefault(); release(); }
 });
 
 // Touch: whole timer area; any touch stops a running timer.
@@ -339,7 +339,10 @@ function setMode(m) {
   if (authed()) load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-window.addEventListener('hashchange', () => setMode(location.hash === '#bld' ? 'bld' : '333'));
+window.addEventListener('hashchange', () => {
+  if (applyInviteLink()) return;
+  setMode(location.hash === '#bld' ? 'bld' : '333');
+});
 
 // ---------- settings / init ----------
 $('inspection').checked = localStorage.getItem('inspection') === '1';
@@ -395,6 +398,73 @@ $('logout').onclick = async () => {
   showAuth();
 };
 
+// ---------- invites ----------
+const inviteUrl = (code) => `${location.origin}/#invite=${code}`;
+const daysLeft = (t) => Math.max(1, Math.ceil((t - Date.now()) / 864e5));
+function renderInvites(list) {
+  const ul = $('invite-list');
+  if (!list.length) { ul.innerHTML = '<li class="empty">No invites yet</li>'; return; }
+  ul.innerHTML = '';
+  for (const inv of list) {
+    const li = document.createElement('li');
+    if (inv.used_at) {
+      li.className = 'used';
+      li.innerHTML = `<span class="inv-status">Joined</span><span class="inv-who">${esc(inv.used_by || 'deleted user')}</span>`;
+    } else {
+      li.innerHTML = `<span class="inv-status open">${daysLeft(inv.expires_at)}d left</span><code class="inv-link">${esc(inviteUrl(inv.code))}</code>`;
+      const copy = document.createElement('button');
+      copy.textContent = navigator.share ? 'Share' : 'Copy';
+      copy.onclick = async () => {
+        const url = inviteUrl(inv.code);
+        try {
+          if (navigator.share) await navigator.share({ title: 'Cube Timer invite', text: 'Join me on Cube Timer', url });
+          else { await navigator.clipboard.writeText(url); copy.textContent = 'Copied!'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }
+        } catch { /* share sheet dismissed */ }
+      };
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.className = 'danger';
+      del.setAttribute('aria-label', 'Revoke invite');
+      del.onclick = async () => {
+        try { await api('DELETE', `/api/invites/${inv.code}`); loadInvites(); } catch (e) { $('invite-error').textContent = e.message; }
+      };
+      li.append(copy, del);
+    }
+    ul.appendChild(li);
+  }
+}
+async function loadInvites() {
+  try { renderInvites(await api('GET', '/api/invites')); } catch (e) { $('invite-error').textContent = e.message; }
+}
+$('invite-open').onclick = () => {
+  toggleMenu(false);
+  $('invite-error').textContent = '';
+  $('invite-dialog').showModal();
+  loadInvites();
+};
+$('invite-close').onclick = () => $('invite-dialog').close();
+$('invite-dialog').addEventListener('click', (e) => { if (e.target === $('invite-dialog')) $('invite-dialog').close(); });
+$('invite-create').onclick = async () => {
+  $('invite-error').textContent = '';
+  try {
+    const inv = await api('POST', '/api/invites');
+    await loadInvites();
+    await navigator.clipboard?.writeText(inviteUrl(inv.code)).catch(() => {});
+  } catch (e) { $('invite-error').textContent = e.message; }
+};
+
+// Invite links (#invite=CODE) open the sign-up form with the code filled in
+function applyInviteLink() {
+  const code = (location.hash.match(/^#invite=([A-Za-z0-9_-]+)$/) || [])[1];
+  if (!code) return false;
+  history.replaceState(null, '', location.pathname);
+  if (authed()) return true; // already has an account
+  setAuthMode('register');
+  $('auth-invite').value = code;
+  return true;
+}
+
 renderMemo();
 setAuthMode('login');
+applyInviteLink();
 api('GET', '/api/me').then(({ user }) => signedIn(user)).catch(showAuth);

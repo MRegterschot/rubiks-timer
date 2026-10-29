@@ -33,6 +33,7 @@
         <button id="user-btn" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Account"></button>
         <div id="user-menu" class="user-menu" role="menu">
           <div class="who">Signed in as <b id="who"></b></div>
+          <button id="invite-open" role="menuitem" class="menu-accent">Invite friends</button>
           <button id="logout" role="menuitem">Log out</button>
         </div>
       </div>
@@ -55,6 +56,17 @@
       <button id="auth-submit" class="primary" type="submit">Log in</button>
     </form>
   </section>
+
+  <dialog id="invite-dialog" class="dialog">
+    <div class="dialog-head">
+      <h2>Invite friends</h2>
+      <button id="invite-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <p class="dialog-sub">Each link creates one account and expires after 7 days.</p>
+    <button id="invite-create" class="primary">Create invite link</button>
+    <p id="invite-error" class="auth-error" role="alert"></p>
+    <ul id="invite-list" class="invite-list"></ul>
+  </dialog>
 
   <main id="app">
     <div id="scramble" class="chrome" aria-live="polite"></div>

@@ -12,6 +12,8 @@ const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MAX_BODY = 10 * 1024;
 const INVITE_CODE = process.env.INVITE_CODE || '';
 const SESSION_DAYS = 365;
+const INVITE_DAYS = 7;
+const MAX_OPEN_INVITES = 5;
 const DAY = 86400e3;
 
 // Version asset URLs by content hash so Cloudflare/browser caches never serve stale CSS/JS
@@ -45,7 +47,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   expires_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS solves_user_mode ON solves (user_id, mode, id);`);
+CREATE INDEX IF NOT EXISTS solves_user_mode ON solves (user_id, mode, id);
+CREATE TABLE IF NOT EXISTS invites (
+  code TEXT PRIMARY KEY,
+  created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_by INTEGER REFERENCES users(id),
+  used_at INTEGER
+);`);
 
 const MODES = new Set(['333', 'bld']);
 const q = {
@@ -62,6 +72,13 @@ const q = {
   renewSession: db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?'),
   delSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
+  invites: db.prepare(`SELECT i.code, i.created_at, i.expires_at, i.used_at, u.username AS used_by FROM invites i
+    LEFT JOIN users u ON u.id = i.used_by WHERE i.created_by = ? AND (i.used_at IS NOT NULL OR i.expires_at > ?) ORDER BY i.created_at DESC LIMIT 20`),
+  openInvites: db.prepare('SELECT COUNT(*) AS n FROM invites WHERE created_by = ? AND used_at IS NULL AND expires_at > ?'),
+  insertInvite: db.prepare('INSERT INTO invites (code, created_by, created_at, expires_at) VALUES (?, ?, ?, ?)'),
+  delInvite: db.prepare('DELETE FROM invites WHERE code = ? AND created_by = ? AND used_at IS NULL'),
+  claimInvite: db.prepare('UPDATE invites SET used_at = ? WHERE code = ? AND used_at IS NULL AND expires_at > ?'),
+  inviteUsedBy: db.prepare('UPDATE invites SET used_by = ? WHERE code = ?'),
 };
 
 const TYPES = {
@@ -189,11 +206,30 @@ async function handleAuth(req, res, path) {
   if (path === '/api/register') {
     if (limited([ipKey])) throw fail(429, 'Too many attempts, try again in 15 minutes');
     const { username, password } = credentials(b);
-    if (INVITE_CODE && b.invite !== INVITE_CODE) { recordFail([ipKey]); throw fail(403, 'Invalid invite code'); }
+    const invite = typeof b.invite === 'string' ? b.invite.trim() : '';
+    // The global code is for bootstrapping; personal invites are single-use
+    const global = INVITE_CODE ? invite === INVITE_CODE : true;
+    const personal = !global && /^[A-Za-z0-9_-]{8,64}$/.test(invite);
+    if (!global && !personal) { recordFail([ipKey]); throw fail(403, 'Invalid invite code'); }
     if (q.userByName.get(username)) throw fail(409, 'That username is taken');
-    const r = q.insertUser.run(username, await hashPassword(password), Date.now());
-    startSession(req, res, Number(r.lastInsertRowid));
-    return json(res, 201, { user: { id: Number(r.lastInsertRowid), username } });
+    const pwHash = await hashPassword(password);
+    let userId;
+    db.exec('BEGIN');
+    try {
+      if (personal && !q.claimInvite.run(Date.now(), invite, Date.now()).changes) {
+        recordFail([ipKey]);
+        throw fail(403, 'This invite is invalid, already used or expired');
+      }
+      userId = Number(q.insertUser.run(username, pwHash, Date.now()).lastInsertRowid);
+      if (personal) q.inviteUsedBy.run(userId, invite);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      if (String(e.message).includes('UNIQUE')) throw fail(409, 'That username is taken');
+      throw e;
+    }
+    startSession(req, res, userId);
+    return json(res, 201, { user: { id: userId, username } });
   }
   if (path === '/api/login') {
     if (!b || typeof b.username !== 'string' || typeof b.password !== 'string') throw bad('Username and password required');
@@ -208,8 +244,29 @@ async function handleAuth(req, res, path) {
   json(res, 404, { error: 'Not found' });
 }
 
+function handleInvites(req, res, path, uid) {
+  const now = Date.now();
+  if (path === '/api/invites' && req.method === 'GET') return json(res, 200, q.invites.all(uid, now));
+  if (path === '/api/invites' && req.method === 'POST') {
+    if (q.openInvites.get(uid, now).n >= MAX_OPEN_INVITES) throw fail(429, `You already have ${MAX_OPEN_INVITES} unused invites. Revoke one or wait for them to be used.`);
+    const code = randomBytes(9).toString('base64url');
+    q.insertInvite.run(code, uid, now, now + INVITE_DAYS * DAY);
+    return json(res, 201, { code, created_at: now, expires_at: now + INVITE_DAYS * DAY, used_at: null, used_by: null });
+  }
+  const m = path.match(/^\/api\/invites\/([A-Za-z0-9_-]+)$/);
+  if (m && req.method === 'DELETE') {
+    return q.delInvite.run(m[1], uid).changes ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Invite not found or already used' });
+  }
+  json(res, 404, { error: 'Not found' });
+}
+
 async function handleApi(req, res, path) {
   if (['/api/me', '/api/login', '/api/register', '/api/logout'].includes(path)) return handleAuth(req, res, path);
+  if (path === '/api/invites' || path.startsWith('/api/invites/')) {
+    const user = currentUser(req);
+    if (!user) return json(res, 401, { error: 'Not logged in' });
+    return handleInvites(req, res, path, user.id);
+  }
   const m = path.match(/^\/api\/solves(?:\/(\d+))?$/);
   if (!m) return json(res, 404, { error: 'Not found' });
   const user = currentUser(req);

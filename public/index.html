@@ -3,23 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#0f1115">
+  <meta name="theme-color" content="#07080c">
   <title>Cube Timer</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'><g rx='2'><rect x='1' y='1' width='8' height='8' rx='2' fill='%23ff3b5c'/><rect x='11' y='1' width='8' height='8' rx='2' fill='%23ffd23f'/><rect x='21' y='1' width='8' height='8' rx='2' fill='%2333d17a'/><rect x='1' y='11' width='8' height='8' rx='2' fill='%233d8bff'/><rect x='11' y='11' width='8' height='8' rx='2' fill='%23f4f6fb'/><rect x='21' y='11' width='8' height='8' rx='2' fill='%23ff8a2b'/><rect x='1' y='21' width='8' height='8' rx='2' fill='%2333d17a'/><rect x='11' y='21' width='8' height='8' rx='2' fill='%23ff3b5c'/><rect x='21' y='21' width='8' height='8' rx='2' fill='%23ffd23f'/></g></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <header>
-    <h1>Cube Timer</h1>
-    <label class="toggle"><input type="checkbox" id="inspection"> 15s inspection</label>
+<body data-state="idle">
+  <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="chrome">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <h1>cube<span>timer</span></h1>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="inspection">
+      <span class="track"><span class="knob"></span></span>
+      <span class="label">15s inspection</span>
+    </label>
   </header>
+
   <main>
-    <div id="scramble" aria-live="polite"></div>
-    <div id="timer" tabindex="0" role="timer" aria-label="Timer">0.00</div>
-    <div id="hint">Hold space (or touch and hold) until green, release to start</div>
+    <div id="scramble" class="chrome" aria-live="polite"></div>
 
-    <section id="stats" class="stats"></section>
+    <div class="stage">
+      <div id="timer" tabindex="0" role="timer" aria-label="Timer">0.00</div>
+      <div id="hint" class="chrome"><span class="desk">Hold <kbd>space</kbd> or touch &amp; hold</span><span class="mob">Touch &amp; hold</span> until green, release to start</div>
+    </div>
 
-    <section class="solves">
+    <section id="stats" class="stats chrome"></section>
+
+    <section class="solves chrome">
       <div class="solves-head">
         <h2>Solves</h2>
         <button id="clear" class="danger">Clear all</button>

@@ -49,10 +49,13 @@ function genScramble() {
 }
 function newScramble() {
   scramble = genScramble();
-  $('scramble').textContent = scramble;
+  $('scramble').innerHTML = scramble.split(' ').map((m, i) => `<span data-f="${m[0]}" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
 }
 
 // ---------- stats ----------
+let isPb = false;
+// Fastest non-DNF solve, used for PB highlighting
+const bestSolve = () => solves.reduce((b, s) => (eff(s) !== null && (!b || eff(s) < eff(b)) ? s : b), null);
 // WCA trimmed mean of the last n solves; null if fewer than n or 2+ DNFs.
 function avgOf(list, n) {
   if (list.length < n) return null;
@@ -96,8 +99,10 @@ function render() {
   const ul = $('list');
   if (!solves.length) { ul.innerHTML = '<li class="empty">No solves yet</li>'; return; }
   ul.innerHTML = '';
+  const pb = bestSolve();
   solves.forEach((s, i) => {
     const li = document.createElement('li');
+    if (s === pb) li.className = 'pb';
     li.title = s.scramble;
     const cls = s.penalty === 'DNF' ? 'dnf' : s.penalty === '+2' ? 'p2' : '';
     li.innerHTML = `<span class="n">${solves.length - i}.</span><span class="t ${cls}">${fmtSolve(s)}</span>`;
@@ -136,6 +141,7 @@ $('clear').onclick = async () => {
 // ---------- timer ----------
 const setState = (s) => {
   state = s;
+  document.body.dataset.state = s;
   timerEl.className = { holding: 'holding', ready: 'ready', inspecting: 'inspecting', running: 'running' }[s] || '';
 };
 const useInspection = () => $('inspection').checked;
@@ -177,13 +183,16 @@ async function stopRun() {
   const sc = scramble;
   newScramble();
   try {
+    const prevBest = bestSolve();
     const s = await api('POST', '/api/solves', { time_ms: ms, scramble: sc, penalty });
+    isPb = eff(s) !== null && prevBest && eff(s) < eff(prevBest);
     solves.unshift(s);
     render();
     if (penalty === 'DNF') timerEl.textContent = 'DNF';
     else if (penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
   } catch (e) { alert('Failed to save solve: ' + e.message); }
   setState('idle');
+  if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
 }
 
 // Press: begin hold, or stop a running timer.

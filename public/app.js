@@ -2,13 +2,15 @@
 
 const HOLD_MS = 300;
 const INSPECT_S = 15;
+const BOUNCE_MS = 250;
+const PARITY_ALG = "R U R' F' R U2 R' U2 R' F R U R U2 R' U'";
 const $ = (id) => document.getElementById(id);
 const timerEl = $('timer');
 
+let mode = location.hash === '#bld' ? 'bld' : '333';
 let solves = [];
 let scramble = '';
 let state = 'idle'; // idle | holding | ready | inspecting | running | stopped
-let inspecting = false; // whether inspection is active before a run
 let inspectStart = 0;
 let inspectTimer = null;
 let holdTimer = null;
@@ -16,6 +18,9 @@ let startTime = 0;
 let raf = 0;
 let inspectPenalty = null;
 let lastStop = 0;
+let memoAt = null; // BLD memo split (ms since start)
+let splitAt = 0;
+let isPb = false;
 
 // ---------- formatting ----------
 function fmt(ms) {
@@ -28,6 +33,8 @@ function fmt(ms) {
 // Effective time: null means DNF
 const eff = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
 const fmtSolve = (s) => (s.penalty === 'DNF' ? 'DNF' : fmt(eff(s)) + (s.penalty === '+2' ? '+' : ''));
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m[0]}" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
 
 // ---------- scramble ----------
 function genScramble() {
@@ -49,32 +56,36 @@ function genScramble() {
 }
 function newScramble() {
   scramble = genScramble();
-  $('scramble').innerHTML = scramble.split(' ').map((m, i) => `<span data-f="${m[0]}" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
+  $('scramble').innerHTML = chips(scramble);
 }
 
 // ---------- stats ----------
-let isPb = false;
-// Fastest non-DNF solve, used for PB highlighting
 const bestSolve = () => solves.reduce((b, s) => (eff(s) !== null && (!b || eff(s) < eff(b)) ? s : b), null);
-// WCA trimmed mean of the last n solves; null if fewer than n or 2+ DNFs.
-function avgOf(list, n) {
-  if (list.length < n) return null;
-  const vals = list.slice(0, n).map(eff).map((v) => (v === null ? Infinity : v));
-  vals.sort((a, b) => a - b);
+// WCA trimmed mean of the last n solves; 'DNF' if too many DNFs, null if not enough solves.
+function avgOf(n) {
+  if (solves.length < n) return null;
+  const vals = solves.slice(0, n).map(eff).map((v) => (v === null ? Infinity : v)).sort((a, b) => a - b);
   const trim = n === 5 ? 1 : Math.ceil(n * 0.05);
   const kept = vals.slice(trim, n - trim);
-  if (kept.some((v) => v === Infinity)) return null;
+  if (kept.some((v) => v === Infinity)) return 'DNF';
   return kept.reduce((a, b) => a + b, 0) / kept.length;
+}
+// Plain mean of the last n (mo3); any DNF makes it DNF.
+function meanOf(n) {
+  if (solves.length < n) return null;
+  const vals = solves.slice(0, n).map(eff);
+  return vals.includes(null) ? 'DNF' : vals.reduce((a, b) => a + b, 0) / n;
 }
 function renderStats() {
   const valid = solves.map(eff).filter((v) => v !== null);
   const best = valid.length ? Math.min(...valid) : null;
   const mean = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
-  const f = (v) => (v === null ? '-' : fmt(v));
-  const items = [
-    ['Best', f(best)], ['ao5', f(avgOf(solves, 5))], ['ao12', f(avgOf(solves, 12))],
-    ['ao100', f(avgOf(solves, 100))], ['Mean', f(mean)], ['Solves', solves.length],
-  ];
+  const f = (v) => (v === null ? '-' : v === 'DNF' ? 'DNF' : fmt(v));
+  const items = mode === 'bld'
+    ? [['Best', f(best)], ['mo3', f(meanOf(3))], ['ao5', f(avgOf(5))],
+       ['Success', solves.length ? `${valid.length}/${solves.length}` : '-'], ['Mean', f(mean)], ['Solves', solves.length]]
+    : [['Best', f(best)], ['ao5', f(avgOf(5))], ['ao12', f(avgOf(12))],
+       ['ao100', f(avgOf(100))], ['Mean', f(mean)], ['Solves', solves.length]];
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
 }
 
@@ -89,7 +100,10 @@ async function api(method, url, body) {
   return res.json();
 }
 async function load() {
-  solves = await api('GET', '/api/solves');
+  const m = mode;
+  const list = await api('GET', `/api/solves?mode=${m}`);
+  if (m !== mode) return; // tab switched while loading
+  solves = list;
   render();
 }
 
@@ -105,7 +119,10 @@ function render() {
     if (s === pb) li.className = 'pb';
     li.title = s.scramble;
     const cls = s.penalty === 'DNF' ? 'dnf' : s.penalty === '+2' ? 'p2' : '';
-    li.innerHTML = `<span class="n">${solves.length - i}.</span><span class="t ${cls}">${fmtSolve(s)}</span>`;
+    const sub = [];
+    if (s.memo_ms != null) sub.push(`memo ${fmt(s.memo_ms)} · exec ${fmt(s.time_ms - s.memo_ms)}`);
+    if (s.edges || s.corners) sub.push(`<span class="e">${esc(s.edges || '–')}</span> | <span class="c">${esc(s.corners || '–')}</span>`);
+    li.innerHTML = `<span class="n">${solves.length - i}.</span><div class="tm"><span class="t ${cls}">${fmtSolve(s)}</span>${sub.length ? `<span class="sub">${sub.join(' · ')}</span>` : ''}</div>`;
     for (const p of ['+2', 'DNF']) {
       const b = document.createElement('button');
       b.textContent = p;
@@ -134,9 +151,56 @@ async function removeSolve(id) {
   catch (e) { alert(e.message); }
 }
 $('clear').onclick = async () => {
-  if (!solves.length || !confirm('Delete ALL solves? This cannot be undone.')) return;
-  try { await api('DELETE', '/api/solves'); solves = []; render(); } catch (e) { alert(e.message); }
+  const label = mode === 'bld' ? 'blindfolded' : '3×3';
+  if (!solves.length || !confirm(`Delete ALL ${label} solves? This cannot be undone.`)) return;
+  try { await api('DELETE', `/api/solves?mode=${mode}`); solves = []; render(); } catch (e) { alert(e.message); }
 };
+
+// ---------- memo (BLD letters) ----------
+const memoInputs = { edges: $('edges'), corners: $('corners') };
+const letters = (v) => v.toUpperCase().replace(/[^A-Z]/g, '');
+
+// Re-group letters into pairs, keeping the caret after the same letter
+function formatMemo(input) {
+  const before = letters(input.value.slice(0, input.selectionStart ?? input.value.length)).length;
+  const pairs = letters(input.value).match(/.{1,2}/g) || [];
+  const out = pairs.join(' ');
+  if (out !== input.value) {
+    input.value = out;
+    let pos = 0;
+    for (let n = 0; pos < out.length && n < before; pos++) if (out[pos] !== ' ') n++;
+    input.setSelectionRange(pos, pos);
+  }
+  localStorage.setItem('memo-' + input.id, out);
+  renderMemo();
+}
+function renderMemo() {
+  const e = letters(memoInputs.edges.value).length;
+  const c = letters(memoInputs.corners.value).length;
+  $('edges-n').textContent = e;
+  $('corners-n').textContent = c;
+  const card = $('parity-card'), badge = $('parity-state'), check = $('memo-check');
+  check.textContent = '';
+  check.className = 'memo-check';
+  if (!e && !c) { card.className = 'card parity'; badge.textContent = 'Enter memo'; return; }
+  const odd = (e || c) % 2 === 1;
+  card.className = 'card parity ' + (odd ? 'needed' : 'clear');
+  badge.textContent = odd ? 'Parity needed' : 'No parity';
+  if (e && c && e % 2 !== c % 2) {
+    check.textContent = 'Edge and corner target counts differ in parity. Double-check your memo.';
+    check.className = 'memo-check warn';
+  }
+}
+function clearMemo() {
+  for (const i of Object.values(memoInputs)) { i.value = ''; localStorage.removeItem('memo-' + i.id); }
+  renderMemo();
+}
+for (const i of Object.values(memoInputs)) {
+  i.value = localStorage.getItem('memo-' + i.id) || '';
+  i.addEventListener('input', () => formatMemo(i));
+}
+$('memo-clear').onclick = clearMemo;
+$('parity-alg').innerHTML = chips(PARITY_ALG);
 
 // ---------- timer ----------
 const setState = (s) => {
@@ -144,7 +208,8 @@ const setState = (s) => {
   document.body.dataset.state = s;
   timerEl.className = { holding: 'holding', ready: 'ready', inspecting: 'inspecting', running: 'running' }[s] || '';
 };
-const useInspection = () => $('inspection').checked;
+const useInspection = () => mode === '333' && $('inspection').checked;
+const setSplit = (t) => { $('split').textContent = t; };
 
 function tick() {
   timerEl.textContent = fmt(performance.now() - startTime);
@@ -168,6 +233,9 @@ function startInspection() {
 
 function startRun() {
   clearInterval(inspectTimer);
+  if (!useInspection()) inspectPenalty = null;
+  memoAt = null;
+  setSplit(mode === 'bld' ? 'memo' : '');
   startTime = performance.now();
   setState('running');
   raf = requestAnimationFrame(tick);
@@ -179,28 +247,42 @@ async function stopRun() {
   lastStop = performance.now();
   setState('stopped');
   timerEl.textContent = fmt(ms);
-  const penalty = inspectPenalty;
-  const sc = scramble;
+  const body = { time_ms: ms, scramble, penalty: inspectPenalty, mode };
+  if (mode === 'bld') {
+    body.memo_ms = memoAt;
+    body.edges = memoInputs.edges.value;
+    body.corners = memoInputs.corners.value;
+    setSplit(memoAt === null ? '' : `memo ${fmt(memoAt)} · exec ${fmt(ms - memoAt)}`);
+  }
   newScramble();
   try {
     const prevBest = bestSolve();
-    const s = await api('POST', '/api/solves', { time_ms: ms, scramble: sc, penalty });
+    const s = await api('POST', '/api/solves', body);
     isPb = eff(s) !== null && prevBest && eff(s) < eff(prevBest);
-    solves.unshift(s);
-    render();
-    if (penalty === 'DNF') timerEl.textContent = 'DNF';
-    else if (penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
+    if (s.mode === mode) { solves.unshift(s); render(); }
+    if (s.mode === 'bld') clearMemo();
+    if (s.penalty === 'DNF') timerEl.textContent = 'DNF';
+    else if (s.penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
   } catch (e) { alert('Failed to save solve: ' + e.message); }
   setState('idle');
   if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
 }
 
-// Press: begin hold, or stop a running timer.
+// Press: begin hold, split memo (BLD), or stop a running timer.
 function press() {
-  if (state === 'running') { stopRun(); return; }
-  if (performance.now() - lastStop < 250) return; // swallow stop-press bounce
+  if (state === 'running') {
+    if (performance.now() - splitAt < BOUNCE_MS) return;
+    if (mode === 'bld' && memoAt === null) {
+      memoAt = Math.round(performance.now() - startTime);
+      splitAt = performance.now();
+      setSplit(`memo ${fmt(memoAt)} · executing`);
+      return;
+    }
+    stopRun();
+    return;
+  }
+  if (performance.now() - lastStop < BOUNCE_MS) return; // swallow stop-press bounce
   if (state === 'idle' || state === 'inspecting') {
-    inspecting = state === 'inspecting';
     const prev = state;
     setState('holding');
     timerEl.dataset.prev = prev;
@@ -220,17 +302,19 @@ function release() {
   }
 }
 
+const typing = () => document.activeElement?.tagName === 'INPUT' && document.activeElement.type === 'text';
 document.addEventListener('keydown', (e) => {
   if (e.repeat) return;
-  if (['INPUT', 'BUTTON', 'TEXTAREA'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
+  if (state === 'running') { e.preventDefault(); press(); return; }
+  if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
+  if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
     document.activeElement.blur();
   }
-  if (state === 'running') { e.preventDefault(); press(); return; }
   if (e.code === 'Space') { e.preventDefault(); press(); }
-  else if (e.code === 'Escape' && (state === 'inspecting')) { clearInterval(inspectTimer); setState('idle'); timerEl.textContent = '0.00'; }
+  else if (e.code === 'Escape' && state === 'inspecting') { clearInterval(inspectTimer); setState('idle'); timerEl.textContent = '0.00'; }
 });
 document.addEventListener('keyup', (e) => {
-  if (e.code === 'Space') { e.preventDefault(); release(); }
+  if (e.code === 'Space' && !typing()) { e.preventDefault(); release(); }
 });
 
 // Touch: whole timer area; any touch stops a running timer.
@@ -238,9 +322,26 @@ timerEl.addEventListener('touchstart', (e) => { e.preventDefault(); press(); }, 
 timerEl.addEventListener('touchend', (e) => { e.preventDefault(); release(); }, { passive: false });
 document.addEventListener('touchstart', (e) => { if (state === 'running') { e.preventDefault(); press(); } }, { passive: false });
 
+// ---------- tabs ----------
+function setMode(m) {
+  if (state !== 'idle' && state !== 'stopped') return;
+  mode = m;
+  document.body.dataset.mode = m;
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
+  history.replaceState(null, '', m === 'bld' ? '#bld' : location.pathname);
+  timerEl.textContent = '0.00';
+  setSplit('');
+  solves = [];
+  render();
+  newScramble();
+  load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
+}
+document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+window.addEventListener('hashchange', () => setMode(location.hash === '#bld' ? 'bld' : '333'));
+
 // ---------- settings / init ----------
 $('inspection').checked = localStorage.getItem('inspection') === '1';
 $('inspection').onchange = (e) => localStorage.setItem('inspection', e.target.checked ? '1' : '0');
 
-newScramble();
-load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${e.message}</li>`; });
+renderMemo();
+setMode(mode);

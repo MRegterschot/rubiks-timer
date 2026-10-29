@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body data-state="idle">
+<body data-state="idle" data-mode="333">
   <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
 
   <header class="chrome">
@@ -19,7 +19,11 @@
       <div class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <h1>cube<span>timer</span></h1>
     </div>
-    <label class="switch">
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-mode="333">3×3</button>
+      <button role="tab" data-mode="bld">Blindfolded</button>
+    </nav>
+    <label class="switch only-333">
       <input type="checkbox" id="inspection">
       <span class="track"><span class="knob"></span></span>
       <span class="label">15s inspection</span>
@@ -31,8 +35,37 @@
 
     <div class="stage">
       <div id="timer" tabindex="0" role="timer" aria-label="Timer">0.00</div>
-      <div id="hint" class="chrome"><span class="desk">Hold <kbd>space</kbd> or touch &amp; hold</span><span class="mob">Touch &amp; hold</span> until green, release to start</div>
+      <div id="hint" class="chrome"><span class="desk">Hold <kbd>space</kbd> or touch &amp; hold</span><span class="mob">Touch &amp; hold</span> until green, release to start<span class="only-bld"> · press once to end memo, again to stop</span></div>
+      <div id="split" class="split"></div>
     </div>
+
+    <section id="bld" class="bld only-bld chrome">
+      <div class="card memo">
+        <div class="card-head">
+          <h2>Memo</h2>
+          <button id="memo-clear">Clear</button>
+        </div>
+        <label class="memo-row edges">
+          <span class="tag">Edges</span>
+          <input id="edges" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB CD EF…">
+          <span class="count" id="edges-n">0</span>
+        </label>
+        <label class="memo-row corners">
+          <span class="tag">Corners</span>
+          <input id="corners" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="GH IJ…">
+          <span class="count" id="corners-n">0</span>
+        </label>
+        <p id="memo-check" class="memo-check"></p>
+      </div>
+      <div class="card parity" id="parity-card">
+        <div class="card-head">
+          <h2>Parity algorithm</h2>
+          <span id="parity-state" class="badge"></span>
+        </div>
+        <div class="alg" id="parity-alg"></div>
+        <p class="note">Needed when you have an odd number of targets. Do it after the edges, before the corners.</p>
+      </div>
+    </section>
 
     <section id="stats" class="stats chrome"></section>
 

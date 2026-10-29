@@ -24,14 +24,20 @@ db.exec(`CREATE TABLE IF NOT EXISTS solves (
   penalty TEXT CHECK (penalty IN ('+2','DNF')),
   created_at INTEGER NOT NULL
 )`);
+// Columns added for blindfolded mode; ALTER only when missing so existing DBs migrate in place
+const cols = new Set(db.prepare('PRAGMA table_info(solves)').all().map((c) => c.name));
+for (const [name, def] of [['mode', "TEXT NOT NULL DEFAULT '333'"], ['memo_ms', 'INTEGER'], ['edges', 'TEXT'], ['corners', 'TEXT']]) {
+  if (!cols.has(name)) db.exec(`ALTER TABLE solves ADD COLUMN ${name} ${def}`);
+}
 
+const MODES = new Set(['333', 'bld']);
 const q = {
-  list: db.prepare('SELECT * FROM solves ORDER BY id DESC'),
+  list: db.prepare('SELECT * FROM solves WHERE mode = ? ORDER BY id DESC'),
   get: db.prepare('SELECT * FROM solves WHERE id = ?'),
-  insert: db.prepare('INSERT INTO solves (time_ms, scramble, penalty, created_at) VALUES (?, ?, ?, ?)'),
+  insert: db.prepare('INSERT INTO solves (time_ms, scramble, penalty, created_at, mode, memo_ms, edges, corners) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
   patch: db.prepare('UPDATE solves SET penalty = ? WHERE id = ?'),
   del: db.prepare('DELETE FROM solves WHERE id = ?'),
-  clear: db.prepare('DELETE FROM solves'),
+  clear: db.prepare('DELETE FROM solves WHERE mode = ?'),
 };
 
 const TYPES = {
@@ -68,14 +74,22 @@ const readBody = (req) => new Promise((ok, fail) => {
 const validPenalty = (p) => p === null || p === '+2' || p === 'DNF';
 const bad = (msg) => Object.assign(new Error(msg), { status: 400 });
 
+const optLetters = (v, name) => {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string' || v.length > 200) throw bad(`${name} must be a string (max 200 chars)`);
+  return v;
+};
+
 async function handleApi(req, res, path) {
   const m = path.match(/^\/api\/solves(?:\/(\d+))?$/);
   if (!m) return json(res, 404, { error: 'Not found' });
   const id = m[1] ? Number(m[1]) : null;
 
   if (!id) {
-    if (req.method === 'GET') return json(res, 200, q.list.all());
-    if (req.method === 'DELETE') { q.clear.run(); return json(res, 200, { ok: true }); }
+    const mode = new URL(req.url, 'http://localhost').searchParams.get('mode') || '333';
+    if (!MODES.has(mode)) throw bad('mode must be "333" or "bld"');
+    if (req.method === 'GET') return json(res, 200, q.list.all(mode));
+    if (req.method === 'DELETE') { q.clear.run(mode); return json(res, 200, { ok: true }); }
     if (req.method === 'POST') {
       const b = await readBody(req);
       if (!b || typeof b !== 'object') throw bad('Body must be an object');
@@ -84,7 +98,11 @@ async function handleApi(req, res, path) {
       if (!Number.isInteger(time_ms) || time_ms < 0 || time_ms > 1e9) throw bad('time_ms must be a non-negative integer');
       if (typeof scramble !== 'string' || scramble.length > 500) throw bad('scramble must be a string (max 500 chars)');
       if (!validPenalty(penalty)) throw bad('penalty must be null, "+2" or "DNF"');
-      const r = q.insert.run(time_ms, scramble, penalty, Date.now());
+      const mode = b.mode ?? '333';
+      if (!MODES.has(mode)) throw bad('mode must be "333" or "bld"');
+      const memo = b.memo_ms ?? null;
+      if (memo !== null && (!Number.isInteger(memo) || memo < 0 || memo > time_ms)) throw bad('memo_ms must be an integer between 0 and time_ms');
+      const r = q.insert.run(time_ms, scramble, penalty, Date.now(), mode, memo, optLetters(b.edges, 'edges'), optLetters(b.corners, 'corners'));
       return json(res, 201, q.get.get(r.lastInsertRowid));
     }
   } else {

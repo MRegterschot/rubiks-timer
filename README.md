@@ -36,3 +36,7 @@ Everyone has their own account and sees only their own solves. A login stays val
 - Logged-in users create personal invite links via **Account → Invite friends**. Each link works once and expires after 7 days. A user can have at most 5 unused invites.
 - Forgotten password (an admin runs this on the server):
   `docker exec <container> node reset-password.js <username> <new-password>`
+
+## Leaderboard
+
+The **Leaderboard** tab ranks everyone by best single, ao5 and ao12 for 3×3, and by best single, mo3 and success rate for blindfolded. All solves and usernames are public: clicking a name shows that person's full solve history. The data is also available without logging in at `GET /api/leaderboard?mode=333|bld` and `GET /api/users/<name>/solves?mode=333|bld`.

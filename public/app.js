@@ -60,34 +60,35 @@ function newScramble() {
 }
 
 // ---------- stats ----------
-const bestSolve = () => solves.reduce((b, s) => (eff(s) !== null && (!b || eff(s) < eff(b)) ? s : b), null);
+const bestSolve = (list = solves) => list.reduce((b, s) => (eff(s) !== null && (!b || eff(s) < eff(b)) ? s : b), null);
 // WCA trimmed mean of the last n solves; 'DNF' if too many DNFs, null if not enough solves.
-function avgOf(n) {
-  if (solves.length < n) return null;
-  const vals = solves.slice(0, n).map(eff).map((v) => (v === null ? Infinity : v)).sort((a, b) => a - b);
+function avgOf(n, list = solves) {
+  if (list.length < n) return null;
+  const vals = list.slice(0, n).map(eff).map((v) => (v === null ? Infinity : v)).sort((a, b) => a - b);
   const trim = n === 5 ? 1 : Math.ceil(n * 0.05);
   const kept = vals.slice(trim, n - trim);
   if (kept.some((v) => v === Infinity)) return 'DNF';
   return kept.reduce((a, b) => a + b, 0) / kept.length;
 }
 // Plain mean of the last n (mo3); any DNF makes it DNF.
-function meanOf(n) {
-  if (solves.length < n) return null;
-  const vals = solves.slice(0, n).map(eff);
+function meanOf(n, list = solves) {
+  if (list.length < n) return null;
+  const vals = list.slice(0, n).map(eff);
   return vals.includes(null) ? 'DNF' : vals.reduce((a, b) => a + b, 0) / n;
 }
-function renderStats() {
-  const valid = solves.map(eff).filter((v) => v !== null);
+function statsHtml(list, m) {
+  const valid = list.map(eff).filter((v) => v !== null);
   const best = valid.length ? Math.min(...valid) : null;
   const mean = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
   const f = (v) => (v === null ? '-' : v === 'DNF' ? 'DNF' : fmt(v));
-  const items = mode === 'bld'
-    ? [['Best', f(best)], ['mo3', f(meanOf(3))], ['ao5', f(avgOf(5))],
-       ['Success', solves.length ? `${valid.length}/${solves.length}` : '-'], ['Mean', f(mean)], ['Solves', solves.length]]
-    : [['Best', f(best)], ['ao5', f(avgOf(5))], ['ao12', f(avgOf(12))],
-       ['ao100', f(avgOf(100))], ['Mean', f(mean)], ['Solves', solves.length]];
-  $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
+  const items = m === 'bld'
+    ? [['Best', f(best)], ['mo3', f(meanOf(3, list))], ['ao5', f(avgOf(5, list))],
+       ['Success', list.length ? `${valid.length}/${list.length}` : '-'], ['Mean', f(mean)], ['Solves', list.length]]
+    : [['Best', f(best)], ['ao5', f(avgOf(5, list))], ['ao12', f(avgOf(12, list))],
+       ['ao100', f(avgOf(100, list))], ['Mean', f(mean)], ['Solves', list.length]];
+  return items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
 }
+function renderStats() { $('stats').innerHTML = statsHtml(solves, mode); }
 
 // ---------- API ----------
 async function api(method, url, body) {
@@ -109,6 +110,17 @@ async function load() {
 }
 
 // ---------- list ----------
+function solveItem(s, n, isPb) {
+  const li = document.createElement('li');
+  if (isPb) li.className = 'pb';
+  li.title = s.scramble;
+  const cls = s.penalty === 'DNF' ? 'dnf' : s.penalty === '+2' ? 'p2' : '';
+  const sub = [];
+  if (s.memo_ms != null) sub.push(`memo ${fmt(s.memo_ms)} · exec ${fmt(s.time_ms - s.memo_ms)}`);
+  if (s.edges || s.corners) sub.push(`<span class="e">${esc(s.edges || '–')}</span> | <span class="c">${esc(s.corners || '–')}</span>`);
+  li.innerHTML = `<span class="n">${n}.</span><div class="tm"><span class="t ${cls}">${fmtSolve(s)}</span>${sub.length ? `<span class="sub">${sub.join(' · ')}</span>` : ''}</div>`;
+  return li;
+}
 function render() {
   renderStats();
   const ul = $('list');
@@ -116,14 +128,7 @@ function render() {
   ul.innerHTML = '';
   const pb = bestSolve();
   solves.forEach((s, i) => {
-    const li = document.createElement('li');
-    if (s === pb) li.className = 'pb';
-    li.title = s.scramble;
-    const cls = s.penalty === 'DNF' ? 'dnf' : s.penalty === '+2' ? 'p2' : '';
-    const sub = [];
-    if (s.memo_ms != null) sub.push(`memo ${fmt(s.memo_ms)} · exec ${fmt(s.time_ms - s.memo_ms)}`);
-    if (s.edges || s.corners) sub.push(`<span class="e">${esc(s.edges || '–')}</span> | <span class="c">${esc(s.corners || '–')}</span>`);
-    li.innerHTML = `<span class="n">${solves.length - i}.</span><div class="tm"><span class="t ${cls}">${fmtSolve(s)}</span>${sub.length ? `<span class="sub">${sub.join(' · ')}</span>` : ''}</div>`;
+    const li = solveItem(s, solves.length - i, s === pb);
     for (const p of ['+2', 'DNF']) {
       const b = document.createElement('button');
       b.textContent = p;
@@ -305,8 +310,10 @@ function release() {
 
 const typing = () => document.activeElement?.tagName === 'INPUT' && ['text', 'password'].includes(document.activeElement.type);
 const authed = () => document.body.dataset.auth === 'in';
+// Timer only listens on the timer tabs with no dialog open
+const timerActive = () => authed() && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
 document.addEventListener('keydown', (e) => {
-  if (e.repeat || !authed() || $('invite-dialog').open) return;
+  if (e.repeat || !timerActive()) return;
   if (state === 'running') { e.preventDefault(); press(); return; }
   if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
   if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
@@ -316,17 +323,18 @@ document.addEventListener('keydown', (e) => {
   else if (e.code === 'Escape' && state === 'inspecting') { clearInterval(inspectTimer); setState('idle'); timerEl.textContent = '0.00'; }
 });
 document.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' && authed() && !$('invite-dialog').open && !typing()) { e.preventDefault(); release(); }
+  if (e.code === 'Space' && timerActive() && !typing()) { e.preventDefault(); release(); }
 });
 
 // Touch: whole timer area; any touch stops a running timer.
-timerEl.addEventListener('touchstart', (e) => { e.preventDefault(); press(); }, { passive: false });
+timerEl.addEventListener('touchstart', (e) => { if (timerActive()) { e.preventDefault(); press(); } }, { passive: false });
 timerEl.addEventListener('touchend', (e) => { e.preventDefault(); release(); }, { passive: false });
 document.addEventListener('touchstart', (e) => { if (state === 'running') { e.preventDefault(); press(); } }, { passive: false });
 
 // ---------- tabs ----------
 function setMode(m) {
   if (state !== 'idle' && state !== 'stopped') return;
+  if (m === 'board') { showBoard(); return; }
   mode = m;
   document.body.dataset.mode = m;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
@@ -339,9 +347,10 @@ function setMode(m) {
   if (authed()) load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board' })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
   if (applyInviteLink()) return;
-  setMode(location.hash === '#bld' ? 'bld' : '333');
+  setMode(modeFromHash());
 });
 
 // ---------- settings / init ----------
@@ -369,7 +378,7 @@ function signedIn(user) {
   $('user-btn').textContent = user.username[0].toUpperCase();
   $('auth-pass').value = '';
   $('auth-invite').value = '';
-  setMode(mode);
+  setMode(modeFromHash() === 'board' ? 'board' : mode);
 }
 document.querySelectorAll('[data-auth-mode]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.authMode); });
 $('auth-form').onsubmit = async (e) => {
@@ -463,6 +472,102 @@ function applyInviteLink() {
   $('auth-invite').value = code;
   return true;
 }
+
+// ---------- leaderboard & profiles ----------
+const CATS = {
+  333: [['single', 'Single'], ['ao5', 'ao5'], ['ao12', 'ao12']],
+  bld: [['single', 'Single'], ['mo3', 'mo3'], ['success', 'Success rate']],
+};
+let boardEvent = '333';
+let boardCat = 'single';
+let boardRows = [];
+const segSelect = (id, attr, val) => document.querySelectorAll(`#${id} button`).forEach((b) => b.setAttribute('aria-selected', String(b.dataset[attr] === val)));
+
+function showBoard() {
+  document.body.dataset.mode = 'board';
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === 'board')));
+  history.replaceState(null, '', '#leaderboard');
+  loadBoard();
+}
+async function loadBoard() {
+  const ev = boardEvent;
+  segSelect('board-event', 'event', ev);
+  $('board-cat').innerHTML = CATS[ev].map(([k, label]) => `<button type="button" data-cat="${k}" aria-pressed="${k === boardCat}">${label}</button>`).join('');
+  try {
+    const { users } = await api('GET', `/api/leaderboard?mode=${ev}`);
+    if (ev !== boardEvent) return;
+    boardRows = users;
+    renderBoard();
+  } catch (e) { $('board-list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; }
+}
+function renderBoard() {
+  const cat = boardCat;
+  let rows;
+  if (cat === 'success') {
+    rows = boardRows.filter((u) => u.solves).map((u) => ({ ...u, rate: u.successes / u.solves }))
+      .sort((a, b) => b.rate - a.rate || b.successes - a.successes);
+  } else {
+    rows = boardRows.filter((u) => u[cat] != null).sort((a, b) => a[cat] - b[cat]);
+  }
+  const ol = $('board-list');
+  if (!rows.length) { ol.innerHTML = '<li class="empty">Nobody has a result here yet. Be the first!</li>'; return; }
+  const me = $('who').textContent;
+  ol.innerHTML = rows.map((u, i) => {
+    const value = cat === 'success' ? `${Math.round(u.rate * 100)}%` : fmt(u[cat]);
+    const extra = cat === 'success' ? `${u.successes}/${u.solves} solved` : `${u.solves} solve${u.solves === 1 ? '' : 's'}`;
+    return `<li class="${u.username === me ? 'me' : ''}${i < 3 ? ' top top' + (i + 1) : ''}">
+      <span class="rank">${i + 1}</span>
+      <button type="button" class="who-link" data-user="${esc(u.username)}"><span class="avatar static">${esc(u.username[0].toUpperCase())}</span>${esc(u.username)}</button>
+      <span class="extra">${extra}</span>
+      <b class="val">${value}</b>
+    </li>`;
+  }).join('');
+}
+$('board-event').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  boardEvent = b.dataset.event;
+  boardCat = 'single';
+  loadBoard();
+};
+$('board-cat').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  boardCat = b.dataset.cat;
+  document.querySelectorAll('#board-cat button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  renderBoard();
+};
+$('board-list').onclick = (e) => { const b = e.target.closest('.who-link'); if (b) openProfile(b.dataset.user, boardEvent); };
+
+let profileUser = '';
+async function openProfile(username, ev) {
+  profileUser = username;
+  $('profile-user').textContent = username;
+  $('profile-avatar').textContent = username[0].toUpperCase();
+  if (!$('profile-dialog').open) $('profile-dialog').showModal();
+  segSelect('profile-event', 'event', ev);
+  $('profile-list').innerHTML = '';
+  $('profile-stats').innerHTML = '';
+  try {
+    const data = await api('GET', `/api/users/${encodeURIComponent(username)}/solves?mode=${ev}`);
+    if (profileUser !== username) return;
+    $('profile-stats').innerHTML = statsHtml(data.solves, ev);
+    const ul = $('profile-list');
+    if (!data.solves.length) { ul.innerHTML = '<li class="empty">No solves yet</li>'; return; }
+    const pb = bestSolve(data.solves);
+    data.solves.forEach((s, i) => {
+      const li = solveItem(s, data.solves.length - i, s === pb);
+      const date = document.createElement('span');
+      date.className = 'date';
+      date.textContent = new Date(s.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+      li.appendChild(date);
+      ul.appendChild(li);
+    });
+  } catch (e) { $('profile-list').innerHTML = `<li class="empty">${esc(e.message)}</li>`; }
+}
+$('profile-event').onclick = (e) => { const b = e.target.closest('button'); if (b) openProfile(profileUser, b.dataset.event); };
+$('profile-close').onclick = () => $('profile-dialog').close();
+$('profile-dialog').addEventListener('click', (e) => { if (e.target === $('profile-dialog')) $('profile-dialog').close(); });
 
 renderMemo();
 setAuthMode('login');

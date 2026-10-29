@@ -79,6 +79,8 @@ const q = {
   delInvite: db.prepare('DELETE FROM invites WHERE code = ? AND created_by = ? AND used_at IS NULL'),
   claimInvite: db.prepare('UPDATE invites SET used_at = ? WHERE code = ? AND used_at IS NULL AND expires_at > ?'),
   inviteUsedBy: db.prepare('UPDATE invites SET used_by = ? WHERE code = ?'),
+  boardSolves: db.prepare('SELECT s.user_id, u.username, s.time_ms, s.penalty FROM solves s JOIN users u ON u.id = s.user_id WHERE s.mode = ? ORDER BY s.user_id, s.id'),
+  publicSolves: db.prepare('SELECT id, time_ms, scramble, penalty, created_at, mode, memo_ms, edges, corners FROM solves WHERE user_id = ? AND mode = ? ORDER BY id DESC LIMIT 1000'),
 };
 
 const TYPES = {
@@ -244,6 +246,52 @@ async function handleAuth(req, res, path) {
   json(res, 404, { error: 'Not found' });
 }
 
+// ---------- leaderboard ----------
+const effMs = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
+// Best rolling average over a chronological list; trimmed = WCA average, otherwise plain mean (mo3)
+function bestAvg(vals, n, trimmed) {
+  let best = null;
+  for (let i = 0; i + n <= vals.length; i++) {
+    let win = vals.slice(i, i + n);
+    if (trimmed) {
+      const trim = n === 5 ? 1 : Math.ceil(n * 0.05);
+      win = win.map((v) => (v === null ? Infinity : v)).sort((a, b) => a - b).slice(trim, n - trim);
+      if (win.includes(Infinity)) continue;
+    } else if (win.includes(null)) continue;
+    const avg = win.reduce((a, b) => a + b, 0) / win.length;
+    if (best === null || avg < best) best = avg;
+  }
+  return best === null ? null : Math.round(best);
+}
+function leaderboard(mode) {
+  const byUser = new Map();
+  for (const s of q.boardSolves.all(mode)) {
+    if (!byUser.has(s.user_id)) byUser.set(s.user_id, { username: s.username, vals: [] });
+    byUser.get(s.user_id).vals.push(effMs(s));
+  }
+  return [...byUser.values()].map(({ username, vals }) => {
+    const ok = vals.filter((v) => v !== null);
+    const row = { username, solves: vals.length, single: ok.length ? Math.min(...ok) : null };
+    if (mode === 'bld') Object.assign(row, { mo3: bestAvg(vals, 3, false), successes: ok.length });
+    else Object.assign(row, { ao5: bestAvg(vals, 5, true), ao12: bestAvg(vals, 12, true) });
+    return row;
+  });
+}
+
+function handlePublic(req, res, path) {
+  if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
+  const mode = new URL(req.url, 'http://localhost').searchParams.get('mode') || '333';
+  if (!MODES.has(mode)) throw bad('mode must be "333" or "bld"');
+  if (path === '/api/leaderboard') return json(res, 200, { mode, users: leaderboard(mode) });
+  const m = path.match(/^\/api\/users\/([^/]+)\/solves$/);
+  if (!m) return json(res, 404, { error: 'Not found' });
+  let name;
+  try { name = decodeURIComponent(m[1]); } catch { throw bad('Bad username'); }
+  const user = q.userByName.get(name);
+  if (!user) return json(res, 404, { error: 'User not found' });
+  return json(res, 200, { username: user.username, mode, solves: q.publicSolves.all(user.id, mode) });
+}
+
 function handleInvites(req, res, path, uid) {
   const now = Date.now();
   if (path === '/api/invites' && req.method === 'GET') return json(res, 200, q.invites.all(uid, now));
@@ -262,6 +310,7 @@ function handleInvites(req, res, path, uid) {
 
 async function handleApi(req, res, path) {
   if (['/api/me', '/api/login', '/api/register', '/api/logout'].includes(path)) return handleAuth(req, res, path);
+  if (path === '/api/leaderboard' || path.startsWith('/api/users/')) return handlePublic(req, res, path);
   if (path === '/api/invites' || path.startsWith('/api/invites/')) {
     const user = currentUser(req);
     if (!user) return json(res, 401, { error: 'Not logged in' });

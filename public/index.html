@@ -22,6 +22,7 @@
     <nav class="tabs" role="tablist">
       <button role="tab" data-mode="333">3×3</button>
       <button role="tab" data-mode="bld">Blindfolded</button>
+      <button role="tab" data-mode="board">Leaderboard</button>
     </nav>
     <div class="right">
       <label class="switch only-333">
@@ -68,7 +69,35 @@
     <ul id="invite-list" class="invite-list"></ul>
   </dialog>
 
+  <dialog id="profile-dialog" class="dialog wide">
+    <div class="dialog-head">
+      <div class="profile-name"><span id="profile-avatar" class="avatar static"></span><h2 id="profile-user"></h2></div>
+      <button id="profile-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <div class="seg small" id="profile-event">
+      <button type="button" data-event="333" aria-selected="true">3×3</button>
+      <button type="button" data-event="bld" aria-selected="false">Blindfolded</button>
+    </div>
+    <section id="profile-stats" class="stats"></section>
+    <ul id="profile-list" class="profile-list"></ul>
+  </dialog>
+
   <main id="app">
+    <section id="board" class="board">
+      <div class="board-head">
+        <div>
+          <h2 class="board-title">Leaderboard</h2>
+          <p class="board-sub">Everyone's best results. Click a name to see all their solves.</p>
+        </div>
+        <div class="seg small" id="board-event">
+          <button type="button" data-event="333" aria-selected="true">3×3</button>
+          <button type="button" data-event="bld" aria-selected="false">Blindfolded</button>
+        </div>
+      </div>
+      <div class="pills" id="board-cat"></div>
+      <ol id="board-list" class="board-list"></ol>
+    </section>
+
     <div id="scramble" class="chrome" aria-live="polite"></div>
 
     <div class="stage">

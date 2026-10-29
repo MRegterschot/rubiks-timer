@@ -25,7 +25,8 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
 body:is([data-state="running"], [data-state="ready"], [data-state="inspecting"]) .chrome { opacity: .06; pointer-events: none; }
 body[data-state="running"] .bg { opacity: .3; }
 
-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; max-width: 960px; margin: 0 auto; }
+/* Three fixed columns so the centred tabs never shift when a side item hides */
+header { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; padding: 18px 24px; max-width: 960px; margin: 0 auto; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo { display: grid; grid-template-columns: repeat(3, 9px); gap: 2px; transform: rotate(-8deg); }
 .logo i { width: 9px; height: 9px; border-radius: 2.5px; animation: twist 6s ease-in-out infinite; }
@@ -108,6 +109,9 @@ button.danger:hover { border-color: var(--r); color: var(--r); background: color
 
 /* Mode tabs */
 body[data-mode="333"] .only-bld, body[data-mode="bld"] .only-333 { display: none !important; }
+/* Keep the switch's space so the header layout stays put */
+body[data-mode="bld"] .switch.only-333 { display: flex !important; visibility: hidden; }
+.switch { justify-self: end; }
 .tabs { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--glass); border: 1px solid var(--line); }
 .tabs button { border: 0; border-radius: 9px; padding: 7px 14px; font-size: .85rem; color: var(--dim); }
 .tabs button[aria-selected="true"] { background: var(--glass-hi); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 4px 14px -6px rgba(0,0,0,.6); }
@@ -117,14 +121,14 @@ body[data-mode="bld"] .tabs button[aria-selected="true"] { color: var(--b); }
 .split { text-align: center; font: 600 1rem var(--mono); color: var(--b); min-height: 1.4em; margin-top: 10px; letter-spacing: .02em; }
 
 /* Blindfolded panels */
-.bld { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; margin-bottom: 14px; }
+.bld { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; margin-bottom: 14px; }
 .card { background: var(--glass); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; transition: border-color .3s, box-shadow .3s; }
 .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; min-height: 32px; }
 .memo-row { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; margin-bottom: 8px; border-radius: 12px; background: rgba(0,0,0,.25); border: 1px solid var(--line); border-left: 3px solid var(--c); transition: border-color .2s; }
 .memo-row:focus-within { border-color: var(--c); }
 .memo-row.edges { --c: var(--b); } .memo-row.corners { --c: var(--o); }
 .memo-row .tag { width: 4.6rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--c); font-weight: 700; }
-.memo-row input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--text); font: 600 1.2rem var(--mono); letter-spacing: .12em; padding: 6px 0; text-transform: uppercase; }
+.memo-row input { flex: 1; min-width: 0; width: 100%; background: transparent; border: 0; outline: none; color: var(--text); font: 600 1.2rem var(--mono); letter-spacing: .12em; padding: 6px 0; text-transform: uppercase; }
 .memo-row input::placeholder { color: rgba(255,255,255,.18); letter-spacing: .08em; }
 .memo-row .count { font: 600 .8rem var(--mono); color: var(--dim); min-width: 2.2rem; text-align: center; padding: 4px 6px; border-radius: 8px; background: var(--glass); }
 .memo-check { margin: 4px 2px 0; font-size: .8rem; color: var(--dim); min-height: 1.2em; }
@@ -142,9 +146,9 @@ li .sub .e { color: color-mix(in srgb, var(--b) 75%, var(--text)); } li .sub .c 
 
 @media (max-width: 760px) {
   .stats { grid-template-columns: repeat(3, 1fr); }
-  .bld { grid-template-columns: 1fr; }
-  header { flex-wrap: wrap; gap: 12px; }
-  .tabs { order: 3; width: 100%; } .tabs button { flex: 1; }
+  .bld { grid-template-columns: minmax(0, 1fr); }
+  header { grid-template-columns: 1fr auto; }
+  .tabs { grid-row: 2; grid-column: 1 / -1; } .tabs button { flex: 1; }
 }
 @media (max-width: 480px) {
   header, main { padding-left: 14px; padding-right: 14px; }

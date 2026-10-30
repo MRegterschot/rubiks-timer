@@ -313,7 +313,9 @@ const authed = () => document.body.dataset.auth === 'in';
 // Timer only listens on the timer tabs with no dialog open
 const timerActive = () => authed() && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
 document.addEventListener('keydown', (e) => {
-  if (e.repeat || !timerActive()) return;
+  if (!timerActive()) return;
+  // Auto-repeat while holding space would otherwise scroll the page
+  if (e.repeat) { if (e.code === 'Space' && !typing()) e.preventDefault(); return; }
   if (state === 'running') { e.preventDefault(); press(); return; }
   if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
   if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {

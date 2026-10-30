@@ -132,6 +132,21 @@
         <div class="alg" id="parity-alg"></div>
         <p class="note">Needed when you have an odd number of targets. Do it after the edges, before the corners.</p>
       </div>
+      <div class="card algs">
+        <div class="card-head">
+          <h2>Swap algorithms</h2>
+        </div>
+        <div class="alg-row edges">
+          <span class="tag">Edges</span>
+          <div class="alg" id="edge-alg"></div>
+          <p class="note">T-perm. Swaps buffer (UR) with target (UL); set up the target to UL, run it, undo setup.</p>
+        </div>
+        <div class="alg-row corners">
+          <span class="tag">Corners</span>
+          <div class="alg" id="corner-alg"></div>
+          <p class="note">Modified Y-perm. Swaps buffer (ULB) with target (RDF); set up the target to RDF, run it, undo setup.</p>
+        </div>
+      </div>
     </section>
 
     <section id="stats" class="stats chrome"></section>

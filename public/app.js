@@ -4,6 +4,8 @@ const HOLD_MS = 300;
 const INSPECT_S = 15;
 const BOUNCE_MS = 250;
 const PARITY_ALG = "R U R' F' R U2 R' U2 R' F R U R U2 R' U'";
+const EDGE_ALG = "R U R' U' R' F R2 U' R' U' R U R' F'";
+const CORNER_ALG = "R U' R' U' R U R' F' R U R' U' R' F R";
 const $ = (id) => document.getElementById(id);
 const timerEl = $('timer');
 
@@ -207,6 +209,8 @@ for (const i of Object.values(memoInputs)) {
 }
 $('memo-clear').onclick = clearMemo;
 $('parity-alg').innerHTML = chips(PARITY_ALG);
+$('edge-alg').innerHTML = chips(EDGE_ALG);
+$('corner-alg').innerHTML = chips(CORNER_ALG);
 
 // ---------- timer ----------
 const setState = (s) => {

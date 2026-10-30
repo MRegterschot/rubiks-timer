@@ -92,6 +92,258 @@ function statsHtml(list, m) {
 }
 function renderStats() { $('stats').innerHTML = statsHtml(solves, mode); }
 
+// ---------- insights (charts) ----------
+const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDur = (ms) => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : m ? `${m}m` : `${Math.round(ms / 1000)}s`; };
+const fmtAxis = (ms) => (ms >= 60000 ? fmt(ms).replace(/\.\d+$/, '') : `${+(ms / 1000).toFixed(1)}s`);
+function niceStep(range, target) {
+  const raw = Math.max(range, 1) / target, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+}
+// Like niceStep, but clock-friendly (15s, 30s, 1m…) once steps reach 10 seconds
+function timeStep(range, target) {
+  const step = niceStep(range, target);
+  return step < 10000 ? step : [10e3, 15e3, 20e3, 30e3, 60e3, 120e3, 300e3, 600e3, 1200e3, 1800e3, 3600e3].find((t) => t >= step) || step;
+}
+// Column with a 4px rounded top and a square base
+function colPath(x, y, w, h) {
+  const r = Math.min(4, h, w / 2);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+const tipRow = (c, v, label) => `<div class="r"><i style="--c:${c}"></i><b>${v}</b> ${label}</div>`;
+
+// Running averages and PB in chronological order
+function series(chron, m) {
+  const vals = chron.map(eff);
+  const win = m === 'bld' ? 5 : chron.length >= 12 ? 12 : 5;
+  const label = m === 'bld' ? 'mean of last 5 successes' : 'ao' + win;
+  const ok = [];
+  let best = null;
+  const avg = [], pb = [];
+  vals.forEach((v, i) => {
+    if (v !== null) { ok.push(v); if (best === null || v < best) best = v; }
+    pb.push(best);
+    if (m === 'bld') { const last = ok.slice(-5); avg.push(last.length >= 3 ? last.reduce((a, b) => a + b, 0) / last.length : null); }
+    else { const a = i + 1 >= win ? avgOf(win, chron.slice(i + 1 - win, i + 1)) : null; avg.push(typeof a === 'number' ? a : null); }
+  });
+  return { vals, avg, pb, label };
+}
+
+function insightTiles(m, chron, s) {
+  const ok = s.vals.filter((v) => v !== null);
+  const tiles = [];
+  if (m === 'bld') {
+    const last = chron.slice(-10), succ = last.filter((x) => eff(x) !== null).length;
+    tiles.push(['Recent success', last.length ? `${Math.round(succ / last.length * 100)}%` : '-', `${succ} of last ${last.length}`]);
+    const memo = chron.filter((x) => x.memo_ms != null).slice(-10);
+    const am = memo.length ? memo.reduce((a, x) => a + x.memo_ms, 0) / memo.length : null;
+    const ae = memo.length ? memo.reduce((a, x) => a + x.time_ms - x.memo_ms, 0) / memo.length : null;
+    tiles.push(['Avg memo', am === null ? '-' : fmt(am), memo.length ? `exec ${fmt(ae)} · last ${memo.length}` : 'no memo splits yet']);
+  } else {
+    const avgs = s.avg.filter((v) => v !== null);
+    let imp = ['Improvement', '-', 'needs 24 solves'];
+    if (chron.length >= 24 && avgs.length >= 2) {
+      const d = avgs[0] - avgs.at(-1);
+      imp = ['Improvement', `<em class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '−' : '+'}${fmt(Math.abs(d))}</em>`, `${s.label} vs your first ${s.label}`];
+    }
+    tiles.push(imp);
+    const recent = ok.slice(-50);
+    const mean = recent.reduce((a, b) => a + b, 0) / (recent.length || 1);
+    const sd = Math.sqrt(recent.reduce((a, v) => a + (v - mean) ** 2, 0) / (recent.length || 1));
+    tiles.push(['Consistency', recent.length >= 5 ? `±${fmt(sd)}` : '-', `std. deviation, last ${Math.min(recent.length, 50)}`]);
+  }
+  let pbs = 0, pbAt = null, best = null;
+  chron.forEach((x) => { const v = eff(x); if (v !== null && (best === null || v < best)) { best = v; pbs++; pbAt = x.created_at; } });
+  tiles.push(['PBs set', pbs, pbAt ? `latest ${fmtDate(pbAt)}` : 'none yet']);
+  // Day streaks in local time
+  const days = new Set(chron.map((x) => dayKey(x.created_at)));
+  const d = new Date();
+  if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
+  let cur = 0;
+  while (days.has(dayKey(d))) { cur++; d.setDate(d.getDate() - 1); }
+  let bestRun = 0, run = 0, prev = null;
+  for (const x of chron) {
+    const t = new Date(x.created_at); t.setHours(0, 0, 0, 0);
+    if (prev === null || t - prev > 36e5 * 30) run = 1; else if (t - prev > 0) run++;
+    prev = t; bestRun = Math.max(bestRun, run);
+  }
+  tiles.push(['Day streak', cur ? `${cur} day${cur === 1 ? '' : 's'}` : '-', `best ${bestRun} day${bestRun === 1 ? '' : 's'}`]);
+  tiles.push(['Time solving', fmtDur(chron.reduce((a, x) => a + x.time_ms, 0)), `${days.size} day${days.size === 1 ? '' : 's'} active`]);
+  const p2 = chron.filter((x) => x.penalty === '+2').length, dnf = chron.filter((x) => x.penalty === 'DNF').length;
+  tiles.push(m === 'bld' ? ['DNFs', dnf, `${Math.round(dnf / chron.length * 100)}% of attempts`]
+    : ['Penalties', `${Math.round((p2 + dnf) / chron.length * 100)}%`, `${p2} × +2 · ${dnf} × DNF`]);
+  return tiles.map(([k, v, sub]) => `<div class="ins-tile"><span>${k}</span><b>${v}</b><small>${sub}</small></div>`).join('');
+}
+
+function progressSvg(root, chron, s, w) {
+  const H = 220, L = 46, R = 14, T = 12, B = 26, n = chron.length;
+  const sorted = s.vals.filter((v) => v !== null).sort((a, b) => a - b);
+  if (n < 2 || !sorted.length) return '<p class="ins-empty">Do a couple more solves to see your progression.</p>';
+  // Cap the y-range so one disaster solve doesn't flatten everything else
+  let hi = Math.min(sorted.at(-1), sorted[Math.floor((sorted.length - 1) * 0.95)] * 1.2), lo = sorted[0];
+  if (hi <= lo) hi = lo + 1000;
+  const step = timeStep(hi - lo, 4), y0 = Math.floor(lo / step) * step, y1 = Math.ceil(hi / step) * step;
+  const x = (i) => L + (i * (w - L - R)) / (n - 1);
+  const y = (v) => T + (1 - (Math.min(v, y1) - y0) / (y1 - y0)) * (H - T - B);
+  let g = '';
+  for (let v = y0; v <= y1 + 1; v += step) g += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 8}" y="${y(v) + 3.5}" text-anchor="end">${fmtAxis(v)}</text>`;
+  const xs = niceStep(n, Math.max(2, Math.floor((w - L - R) / 70)));
+  for (let i = 0; i < n; i += xs) g += `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${i + 1}</text>`;
+  const r = n > 300 ? 1.8 : n > 80 ? 2.5 : 3.5;
+  const dots = s.vals.map((v, i) => (v === null ? '' : `<circle class="dot${v > y1 ? ' clip' : ''}" cx="${x(i)}" cy="${y(v)}" r="${r}"/>`)).join('');
+  const line = (arr, stepped) => {
+    let d = '', open = false;
+    arr.forEach((v, i) => {
+      if (v === null) { open = false; return; }
+      d += !open ? `M${x(i)},${y(v)}` : stepped ? `H${x(i)}V${y(v)}` : `L${x(i)},${y(v)}`;
+      open = true;
+    });
+    return d;
+  };
+  const lastAvg = s.avg.findLastIndex((v) => v !== null);
+  const end = lastAvg < 0 ? '' : `<circle class="end" cx="${x(lastAvg)}" cy="${y(s.avg[lastAvg])}" r="4.5"/>`;
+  root._prog = { x, n, L, R, w, chron, s };
+  return `<svg class="chart" width="${w}" height="${H}" role="img" aria-label="Solve times over ${n} solves">${g}${dots}
+    <path class="pbl" d="${line(s.pb, true)}"/><path class="avg" d="${line(s.avg)}"/>${end}
+    <line class="xh" y1="${T}" y2="${H - B}" visibility="hidden"/>
+    <rect class="hit" data-prog x="${L - 6}" y="0" width="${w - L - R + 12}" height="${H}"/></svg>`;
+}
+
+function histSvg(root, s, w) {
+  const ok = s.vals.filter((v) => v !== null).sort((a, b) => a - b);
+  if (ok.length < 5) return '<p class="ins-empty">Needs at least 5 successful solves.</p>';
+  const H = 170, T = 18, B = 24, L = 4, R = 4;
+  const hi = Math.min(ok.at(-1), ok[Math.floor((ok.length - 1) * 0.95)] * 1.2);
+  const step = timeStep(hi - ok[0], Math.min(16, Math.max(5, Math.floor((w - L - R) / 30))));
+  const start = Math.floor(ok[0] / step) * step, nb = Math.max(1, Math.ceil((hi - start) / step) || 1);
+  const counts = new Array(nb).fill(0);
+  for (const v of ok) counts[Math.min(nb - 1, Math.floor((v - start) / step))]++;
+  const max = Math.max(...counts), slot = (w - L - R) / nb, bw = Math.max(2, Math.min(24, slot - 2));
+  const top = counts.indexOf(max), every = Math.ceil(46 / slot);
+  let g = `<line class="base" x1="${L}" x2="${w - R}" y1="${H - B}" y2="${H - B}"/>`;
+  counts.forEach((c, i) => {
+    const bx = L + i * slot + (slot - bw) / 2, h = (c / max) * (H - T - B);
+    const lo = start + i * step, label = i === nb - 1 && ok.at(-1) >= lo + step ? `${fmtAxis(lo)}+` : `${fmtAxis(lo)}–${fmtAxis(lo + step)}`;
+    root._tips.push(`<div class="h">${label}</div>${tipRow('var(--g)', c, `solve${c === 1 ? '' : 's'}`)}<div class="r dim">${Math.round(c / ok.length * 100)}% of successes</div>`);
+    if (c) g += `<path class="bar" d="${colPath(bx, H - B - h, bw, h)}"/>`;
+    g += `<rect class="hit" data-t="${root._tips.length - 1}" x="${L + i * slot}" y="${T}" width="${slot}" height="${H - T - B}"/>`;
+    if (i === top) g += `<text class="cap" x="${bx + bw / 2}" y="${H - B - h - 6}" text-anchor="middle">${c}</text>`;
+    if (i % every === 0) g += `<text class="ax" x="${L + i * slot}" y="${H - 6}" text-anchor="${i ? 'middle' : 'start'}">${fmtAxis(lo)}</text>`;
+  });
+  return `<svg class="chart" width="${w}" height="${H}" role="img" aria-label="Distribution of solve times">${g}</svg>`;
+}
+
+function memoSvg(root, chron, w) {
+  const list = chron.filter((x) => x.memo_ms != null).slice(-Math.max(5, Math.min(30, Math.floor(w / 20))));
+  if (list.length < 2) return '<p class="ins-empty">Press once mid-solve to split memo from execution.</p>';
+  const H = 170, T = 10, B = 24, L = 42, R = 4;
+  const max = Math.max(...list.map((x) => x.time_ms)), step = timeStep(max, 3), y1 = Math.ceil(max / step) * step;
+  const y = (v) => (v / y1) * (H - T - B), slot = (w - L - R) / list.length, bw = Math.max(3, Math.min(24, slot - 2));
+  let g = '';
+  for (let v = 0; v <= y1; v += step) g += `<line class="${v ? 'grid' : 'base'}" x1="${L}" x2="${w - R}" y1="${H - B - y(v)}" y2="${H - B - y(v)}"/><text class="ax" x="${L - 8}" y="${H - B - y(v) + 3.5}" text-anchor="end">${fmtAxis(v)}</text>`;
+  list.forEach((s, i) => {
+    const bx = L + i * slot + (slot - bw) / 2, hm = y(s.memo_ms), he = y(s.time_ms - s.memo_ms);
+    root._tips.push(`<div class="h">${fmtDate(s.created_at)}${s.penalty === 'DNF' ? ' · DNF' : ''}</div>${tipRow('var(--b)', fmt(s.memo_ms), 'memo')}${tipRow('var(--g)', fmt(s.time_ms - s.memo_ms), 'exec')}<div class="r dim">${fmt(s.time_ms)} total</div>`);
+    g += `<g class="${s.penalty === 'DNF' ? 'dnf' : ''}"><rect class="seg-m" x="${bx}" y="${H - B - hm}" width="${bw}" height="${hm}"/>`;
+    if (he > 2) g += `<path class="seg-e" d="${colPath(bx, H - B - hm - he, bw, he - 2)}"/>`;
+    g += `</g><rect class="hit" data-t="${root._tips.length - 1}" x="${L + i * slot}" y="${T}" width="${slot}" height="${H - T - B}"/>`;
+  });
+  g += `<text class="ax" x="${L}" y="${H - 6}">older</text><text class="ax" x="${w - R}" y="${H - 6}" text-anchor="end">latest</text>`;
+  return `<svg class="chart" width="${w}" height="${H}" role="img" aria-label="Memo and execution time per attempt">${g}</svg>`;
+}
+
+function activitySvg(root, chron, w) {
+  const counts = new Map();
+  for (const x of chron) { const k = dayKey(x.created_at); counts.set(k, (counts.get(k) || 0) + 1); }
+  const C = 12, S = 15, L = 28, T = 16, weeks = Math.max(8, Math.min(53, Math.floor((w - L) / S)));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today); start.setDate(start.getDate() - ((today.getDay() + 6) % 7) - (weeks - 1) * 7);
+  const max = Math.max(1, ...counts.values());
+  let g = ['Mon', '', 'Wed', '', 'Fri', '', ''].map((d, r) => (d ? `<text class="ax" x="0" y="${T + r * S + 9.5}">${d}</text>` : '')).join('');
+  let lastMonth = -1;
+  for (let c = 0; c < weeks; c++) {
+    const wk = new Date(start); wk.setDate(wk.getDate() + c * 7);
+    if (wk.getMonth() !== lastMonth && c < weeks - 2) { g += `<text class="ax" x="${L + c * S}" y="10">${wk.toLocaleDateString(undefined, { month: 'short' })}</text>`; lastMonth = wk.getMonth(); }
+    for (let r = 0; r < 7; r++) {
+      const d = new Date(wk); d.setDate(d.getDate() + r);
+      if (d > today) break;
+      const n = counts.get(dayKey(d)) || 0, lv = n ? Math.ceil((n / max) * 4) : 0;
+      root._tips.push(`<div class="h">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</div><div class="r"><b>${n}</b> solve${n === 1 ? '' : 's'}</div>`);
+      g += `<rect class="cell lv${lv}" data-t="${root._tips.length - 1}" x="${L + c * S}" y="${T + r * S}" width="${C}" height="${C}" rx="3"/>`;
+    }
+  }
+  return `<svg class="chart" width="${L + weeks * S}" height="${T + 7 * S}" role="img" aria-label="Solves per day, last ${weeks} weeks">${g}</svg>`;
+}
+
+const legend = (items) => `<div class="legend">${items.map(([c, l, kind]) => `<span><i class="${kind || 'ln'}" style="--c:${c}"></i>${l}</span>`).join('')}</div>`;
+
+// Renders tiles and charts into root; widths are measured after the skeleton is in the DOM
+function renderInsights(root, list, m) {
+  root._args = [list, m];
+  root._tips = [];
+  root._prog = null;
+  if (!list.length) { root.innerHTML = ''; return; }
+  const chron = list.slice().reverse();
+  const s = series(chron, m);
+  const wide = root.clientWidth >= 640;
+  root.innerHTML = `<div class="ins-tiles">${insightTiles(m, chron, s)}</div>
+    <div class="card ins-chart"><div class="card-head"><h2>Progression</h2>${legend([['var(--dim)', 'solve', 'dt'], ['var(--b)', s.label], ['var(--y)', 'PB']])}</div><div class="plot" data-k="prog"></div></div>
+    <div class="ins-grid${wide ? ' two' : ''}">
+      <div class="card ins-chart"><div class="card-head"><h2>${m === 'bld' ? 'Memo vs exec' : 'Distribution'}</h2>${m === 'bld' ? legend([['var(--b)', 'memo', 'sq'], ['var(--g)', 'exec', 'sq'], ['var(--dim)', 'faded = DNF', 'sq dim']]) : ''}</div><div class="plot" data-k="${m === 'bld' ? 'memo' : 'hist'}"></div></div>
+      <div class="card ins-chart"><div class="card-head"><h2>Activity</h2><div class="legend heat">less${[0, 1, 2, 3, 4].map((l) => `<i class="lv${l}"></i>`).join('')}more</div></div><div class="plot" data-k="act"></div></div>
+    </div><div class="tip" hidden></div>`;
+  for (const el of root.querySelectorAll('.plot')) {
+    const w = Math.max(220, el.clientWidth || 600);
+    el.innerHTML = { prog: () => progressSvg(root, chron, s, w), hist: () => histSvg(root, s, w), memo: () => memoSvg(root, chron, w), act: () => activitySvg(root, chron, w) }[el.dataset.k]();
+  }
+}
+
+function showTip(root, html, e) {
+  const tip = root.querySelector('.tip'), box = root.getBoundingClientRect();
+  tip.innerHTML = html;
+  tip.hidden = false;
+  let left = e.clientX - box.left + 14;
+  if (left + tip.offsetWidth > box.width) left = e.clientX - box.left - tip.offsetWidth - 14;
+  tip.style.left = `${Math.max(0, left)}px`;
+  tip.style.top = `${e.clientY - box.top - tip.offsetHeight - 12}px`;
+}
+function hideTip(root) {
+  const tip = root.querySelector('.tip');
+  if (tip) tip.hidden = true;
+  root.querySelector('.xh')?.setAttribute('visibility', 'hidden');
+  root.querySelector('.hover')?.classList.remove('hover');
+}
+function onInsightPointer(e) {
+  const root = e.currentTarget;
+  const hit = e.target.closest?.('[data-t], [data-prog]');
+  root.querySelector('.hover')?.classList.remove('hover');
+  if (!hit) { hideTip(root); return; }
+  if (hit.hasAttribute('data-t')) {
+    if (hit.classList.contains('cell')) hit.classList.add('hover');
+    else if (hit.previousElementSibling?.matches('.bar, g')) hit.previousElementSibling.classList.add('hover');
+    return showTip(root, root._tips[hit.dataset.t], e);
+  }
+  // Crosshair snaps to the nearest solve
+  const p = root._prog, svgX = e.clientX - hit.ownerSVGElement.getBoundingClientRect().left;
+  const i = Math.max(0, Math.min(p.n - 1, Math.round(((svgX - p.L) / (p.w - p.L - p.R)) * (p.n - 1))));
+  const xh = root.querySelector('.xh');
+  xh.setAttribute('x1', p.x(i)); xh.setAttribute('x2', p.x(i)); xh.setAttribute('visibility', 'visible');
+  const sv = p.chron[i], f = (v) => (v === null ? '-' : fmt(v));
+  showTip(root, `<div class="h">#${i + 1} · ${fmtDate(sv.created_at)}</div>${tipRow('var(--text)', fmtSolve(sv), 'solve')}${tipRow('var(--b)', f(p.s.avg[i]), p.s.label)}${tipRow('var(--y)', f(p.s.pb[i]), 'PB')}`, e);
+}
+for (const id of ['insights', 'profile-insights']) {
+  const root = $(id);
+  root.addEventListener('pointermove', onInsightPointer);
+  root.addEventListener('pointerdown', onInsightPointer);
+  root.addEventListener('pointerleave', () => hideTip(root));
+}
+let resizeT = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeT);
+  resizeT = setTimeout(() => { for (const id of ['insights', 'profile-insights']) { const r = $(id); if (r._args && r.offsetParent) renderInsights(r, ...r._args); } }, 150);
+});
+
 // ---------- API ----------
 async function api(method, url, body) {
   const res = await fetch(url, {
@@ -125,6 +377,7 @@ function solveItem(s, n, isPb) {
 }
 function render() {
   renderStats();
+  renderInsights($('insights'), solves, mode);
   const ul = $('list');
   if (!solves.length) { ul.innerHTML = '<li class="empty">No solves yet</li>'; return; }
   ul.innerHTML = '';
@@ -554,10 +807,12 @@ async function openProfile(username, ev) {
   segSelect('profile-event', 'event', ev);
   $('profile-list').innerHTML = '';
   $('profile-stats').innerHTML = '';
+  renderInsights($('profile-insights'), [], ev);
   try {
     const data = await api('GET', `/api/users/${encodeURIComponent(username)}/solves?mode=${ev}`);
     if (profileUser !== username) return;
     $('profile-stats').innerHTML = statsHtml(data.solves, ev);
+    renderInsights($('profile-insights'), data.solves, ev);
     const ul = $('profile-list');
     if (!data.solves.length) { ul.innerHTML = '<li class="empty">No solves yet</li>'; return; }
     const pb = bestSolve(data.solves);

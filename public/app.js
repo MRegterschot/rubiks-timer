@@ -352,14 +352,16 @@ async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 401 && url.startsWith('/api/solves')) { showAuth(); throw new Error('Logged out'); }
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  if (!res.ok) throw Object.assign(new Error((await res.json().catch(() => ({}))).error || res.statusText), { status: res.status });
   return res.json();
 }
 async function load() {
   const m = mode;
   const list = await api('GET', `/api/solves?mode=${m}`);
   if (m !== mode) return; // tab switched while loading
-  solves = list;
+  // Keep queued solves that haven't reached the server yet on top
+  const saved = new Set(list.map((s) => s.client_id).filter(Boolean));
+  solves = [...pendingFor(m).filter((p) => !saved.has(p.client_id)), ...list];
   render();
 }
 
@@ -384,6 +386,12 @@ function render() {
   const pb = bestSolve();
   solves.forEach((s, i) => {
     const li = solveItem(s, solves.length - i, s === pb);
+    if (s.pending) {
+      li.classList.add('pending');
+      li.insertAdjacentHTML('beforeend', '<span class="pending-tag" title="Will be saved when the server is reachable">saving…</span>');
+      ul.appendChild(li);
+      return;
+    }
     for (const p of ['+2', 'DNF']) {
       const b = document.createElement('button');
       b.textContent = p;
@@ -414,7 +422,13 @@ async function removeSolve(id) {
 $('clear').onclick = async () => {
   const label = mode === 'bld' ? 'blindfolded' : '3×3';
   if (!solves.length || !confirm(`Delete ALL ${label} solves? This cannot be undone.`)) return;
-  try { await api('DELETE', `/api/solves?mode=${mode}`); solves = []; render(); } catch (e) { alert(e.message); }
+  try {
+    await api('DELETE', `/api/solves?mode=${mode}`);
+    const me = $('who').textContent;
+    savePending(loadPending().filter((p) => !(p.user === me && p.mode === mode)));
+    solves = [];
+    render();
+  } catch (e) { alert(e.message); }
 };
 
 // ---------- memo (BLD letters) ----------
@@ -466,9 +480,28 @@ $('edge-alg').innerHTML = chips(EDGE_ALG);
 $('corner-alg').innerHTML = chips(CORNER_ALG);
 
 // ---------- timer ----------
+// Mid-solve the timer block is pinned to the exact centre of the screen; a spacer keeps the page from reflowing
+const stage = timerEl.parentElement;
+const stageSpacer = document.createElement('div');
+function pinTimer(on) {
+  if (on === document.body.classList.contains('pinned')) return;
+  if (on) {
+    timerEl.scrollIntoView({ block: 'center' });
+    const r = stage.getBoundingClientRect();
+    stageSpacer.style.height = `${r.height}px`;
+    Object.assign(stage.style, { left: `${r.left}px`, width: `${r.width}px`, top: `calc(50% - ${timerEl.offsetTop + timerEl.offsetHeight / 2}px)` });
+    stage.before(stageSpacer);
+  } else {
+    stageSpacer.remove();
+    Object.assign(stage.style, { left: '', width: '', top: '' });
+  }
+  document.body.classList.toggle('pinned', on);
+  if (!on) timerEl.scrollIntoView({ block: 'center' });
+}
 const setState = (s) => {
   state = s;
   document.body.dataset.state = s;
+  pinTimer(['holding', 'ready', 'inspecting', 'running'].includes(s));
   timerEl.className = { holding: 'holding', ready: 'ready', inspecting: 'inspecting', running: 'running' }[s] || '';
 };
 const useInspection = () => mode === '333' && $('inspection').checked;
@@ -518,18 +551,61 @@ async function stopRun() {
     setSplit(memoAt === null ? '' : `memo ${fmt(memoAt)} · exec ${fmt(ms - memoAt)}`);
   }
   newScramble();
-  try {
-    const prevBest = bestSolve();
-    const s = await api('POST', '/api/solves', body);
-    isPb = eff(s) !== null && prevBest && eff(s) < eff(prevBest);
-    if (s.mode === mode) { solves.unshift(s); render(); }
-    if (s.mode === 'bld') clearMemo();
-    if (s.penalty === 'DNF') timerEl.textContent = 'DNF';
-    else if (s.penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
-  } catch (e) { alert('Failed to save solve: ' + e.message); }
+  // Queue first so the solve survives a failed request, a deploy or a reload
+  const p = { ...body, client_id: newClientId(), created_at: Date.now(), user: $('who').textContent, pending: true };
+  const prevBest = bestSolve();
+  isPb = eff(p) !== null && prevBest && eff(p) < eff(prevBest);
+  savePending([...loadPending(), p]);
+  solves.unshift(p);
+  render();
+  if (mode === 'bld') clearMemo();
+  if (p.penalty === 'DNF') timerEl.textContent = 'DNF';
+  else if (p.penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
   setState('idle');
   if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
+  flushPending();
 }
+
+// ---------- offline-safe saving ----------
+const PENDING_KEY = 'pending-solves';
+const newClientId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '');
+function loadPending() { try { return JSON.parse(localStorage.getItem(PENDING_KEY)) || []; } catch { return []; } }
+const savePending = (list) => localStorage.setItem(PENDING_KEY, JSON.stringify(list));
+const pendingFor = (m) => loadPending().filter((p) => p.user === $('who').textContent && p.mode === m).reverse();
+let flushing = false, retryT = 0, retryDelay = 2000;
+async function flushPending() {
+  if (flushing || !authed()) return;
+  flushing = true;
+  clearTimeout(retryT);
+  const me = $('who').textContent;
+  try {
+    for (const p of loadPending().filter((x) => x.user === me)) {
+      const { pending, user, ...body } = p;
+      let saved;
+      try { saved = await api('POST', '/api/solves', body); }
+      catch (e) {
+        // A 4xx (other than auth/rate limits) will never succeed; drop it instead of retrying forever
+        if (e.status >= 400 && e.status < 500 && ![401, 408, 429].includes(e.status)) {
+          savePending(loadPending().filter((x) => x.client_id !== p.client_id));
+          solves = solves.filter((s) => s.client_id !== p.client_id);
+          render();
+          alert('Could not save solve: ' + e.message);
+          continue;
+        }
+        retryT = setTimeout(flushPending, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30000);
+        return;
+      }
+      savePending(loadPending().filter((x) => x.client_id !== p.client_id));
+      const i = solves.findIndex((s) => s.client_id === p.client_id);
+      if (i >= 0) solves[i] = saved;
+      else if (saved.mode === mode && !solves.some((s) => s.id === saved.id)) solves.unshift(saved); // list reloaded mid-save
+      render();
+    }
+    retryDelay = 2000;
+  } finally { flushing = false; }
+}
+window.addEventListener('online', () => { retryDelay = 2000; flushPending(); });
 
 // Press: begin hold, split memo (BLD), or stop a running timer.
 function press() {
@@ -638,6 +714,7 @@ function signedIn(user) {
   $('auth-pass').value = '';
   $('auth-invite').value = '';
   setMode(modeFromHash() === 'board' ? 'board' : mode);
+  flushPending();
 }
 document.querySelectorAll('[data-auth-mode]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.authMode); });
 $('auth-form').onsubmit = async (e) => {

@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS challenge_results (
 );`);
 if (!new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)).has('recovery_hash')) db.exec('ALTER TABLE users ADD COLUMN recovery_hash TEXT');
 
-const MODES = new Set(['333', 'bld', 'pll', 'oll']);
+const MODES = new Set(['333', 'bld', 'pll', 'oll', 'pll2', 'oll2']);
 const BOARD_MODES = new Set(['333', 'bld']);
 const q = {
   list: db.prepare('SELECT * FROM solves WHERE user_id = ? AND mode = ? ORDER BY id DESC'),
@@ -503,7 +503,7 @@ async function handleApi(req, res, path) {
 
   if (!id) {
     const mode = new URL(req.url, 'http://localhost').searchParams.get('mode') || '333';
-    if (!MODES.has(mode)) throw bad('mode must be one of 333, bld, pll, oll');
+    if (!MODES.has(mode)) throw bad('mode must be one of 333, bld, pll, oll, pll2, oll2');
     if (req.method === 'GET') return json(res, 200, q.list.all(uid, mode));
     if (req.method === 'DELETE') { q.clear.run(uid, mode); return json(res, 200, { ok: true }); }
     if (req.method === 'POST') {
@@ -515,7 +515,7 @@ async function handleApi(req, res, path) {
       if (typeof scramble !== 'string' || scramble.length > 500) throw bad('scramble must be a string (max 500 chars)');
       if (!validPenalty(penalty)) throw bad('penalty must be null, "+2" or "DNF"');
       const mode = b.mode ?? '333';
-      if (!MODES.has(mode)) throw bad('mode must be one of 333, bld, pll, oll');
+      if (!MODES.has(mode)) throw bad('mode must be one of 333, bld, pll, oll, pll2, oll2');
       const caseId = b.case_id ?? null;
       if (caseId !== null && (typeof caseId !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(caseId))) throw bad('case_id must be 1-8 letters or digits');
       const memo = b.memo_ms ?? null;

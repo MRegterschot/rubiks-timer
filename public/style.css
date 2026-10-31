@@ -117,7 +117,7 @@ button.danger:hover { border-color: var(--r); color: var(--r); background: color
 
 /* Mode tabs */
 body:not([data-mode="bld"]) .only-bld, body:not([data-mode="333"]) .only-333 { display: none !important; }
-body:not(:is([data-mode="pll"], [data-mode="oll"])) .only-train, body:is([data-mode="pll"], [data-mode="oll"]) .no-train { display: none !important; }
+body:not(:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"])) .only-train, body:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"]) .no-train { display: none !important; }
 /* Keep the switch's space so the header layout stays put */
 body:not([data-mode="333"]) .switch.only-333 { display: flex !important; visibility: hidden; }
 .switch { justify-self: end; }
@@ -125,7 +125,7 @@ body:not([data-mode="333"]) .switch.only-333 { display: flex !important; visibil
 .tabs button { border: 0; border-radius: 9px; padding: 7px 14px; font-size: .85rem; color: var(--dim); }
 .tabs button[aria-selected="true"] { background: var(--glass-hi); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 4px 14px -6px rgba(0,0,0,.6); }
 body[data-mode="bld"] .tabs button[aria-selected="true"] { color: var(--b); }
-body:is([data-mode="pll"], [data-mode="oll"]) .tabs button[aria-selected="true"] { color: var(--o); }
+body:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"]) .tabs button[aria-selected="true"] { color: var(--o); }
 
 /* Memo split under the timer */
 .split { text-align: center; font: 600 1rem var(--mono); color: var(--b); min-height: 1.4em; margin-top: 10px; letter-spacing: .02em; }
@@ -398,7 +398,8 @@ li.sess-div:first-child { padding-top: 0; }
 
 /* Trainer */
 .trainer { margin-top: 6px; }
-.trainer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.trainer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+#train-set button { white-space: nowrap; padding: 7px 12px; }
 .train-cases { margin-top: 12px; padding: 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line); }
 .train-cases-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .train-cases-head span { flex: 1; color: var(--dim); font-size: .82rem; }

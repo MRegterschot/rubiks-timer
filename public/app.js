@@ -9,11 +9,11 @@ const CORNER_ALG = "R U' R' U' R U R' F' R U R' U' R' F R";
 const $ = (id) => document.getElementById(id);
 const timerEl = $('timer');
 
-const TRAIN = new Set(['pll', 'oll']);
-let trainSet = localStorage.getItem('train-set') === 'oll' ? 'oll' : 'pll';
+const TRAIN = new Set(['oll2', 'pll2', 'oll', 'pll']);
+let trainSet = TRAIN.has(localStorage.getItem('train-set')) ? localStorage.getItem('train-set') : 'pll';
 let mode = { '#bld': 'bld', '#train': trainSet }[location.hash] || '333';
 const isTrain = () => TRAIN.has(mode);
-const MODE_LABEL = { 333: '3×3', bld: 'blindfolded', pll: 'PLL trainer', oll: 'OLL trainer' };
+const MODE_LABEL = { 333: '3×3', bld: 'blindfolded', pll: 'PLL trainer', oll: 'OLL trainer', pll2: '2-look PLL trainer', oll2: '2-look OLL trainer' };
 let solves = [];
 let scramble = '';
 let state = 'idle'; // idle | holding | ready | inspecting | running | stopped
@@ -426,8 +426,9 @@ const diagrams = new Map();
 function caseSvg(set, id, size) {
   const k = `${set}:${id}:${size}`;
   if (!diagrams.has(k)) {
-    const alg = caseById(set, id)[2];
-    diagrams.set(k, Cube.llSvg(Cube.apply(Cube.solved(), Cube.fmtMoves(Cube.invert(Cube.faceMoves(alg)))), set === 'oll', size));
+    const [, , alg, style] = caseById(set, id);
+    const state = Cube.apply(Cube.solved(), Cube.fmtMoves(Cube.invert(Cube.faceMoves(alg))));
+    diagrams.set(k, Cube.llSvg(state, style || (set.startsWith('oll') ? 'oll' : 'pll'), size));
   }
   return diagrams.get(k);
 }
@@ -435,7 +436,7 @@ function loadSel(set) {
   try { const v = JSON.parse(localStorage.getItem('train-sel-' + set)); if (Array.isArray(v)) return new Set(v); } catch { /* fall through */ }
   return new Set(ALGS[set].map((c) => c[0]));
 }
-const trainSel = { pll: loadSel('pll'), oll: loadSel('oll') };
+const trainSel = Object.fromEntries([...TRAIN].map((set) => [set, loadSel(set)]));
 const saveSel = (set) => localStorage.setItem('train-sel-' + set, JSON.stringify([...trainSel[set]]));
 // Per case: attempts, best, mean of the last 5 successes, DNFs
 function caseStats(list) {

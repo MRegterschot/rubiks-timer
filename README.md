@@ -46,7 +46,7 @@ The **Leaderboard** tab ranks everyone by best single, ao5 and ao12 for 3×3, an
 
 - **Sessions**: solves are grouped automatically; a new session starts after an hour without solves. Each session gets its own stats, and the solve list shows dividers.
 - **Blindfolded memo check**: `public/cube.js` simulates the cube. It checks your memo against the scramble (Old Pochmann, Speffz, buffers UR/ULB; any valid cycle break counts as correct) and can show the solution. Past BLD solves show whether the memo was right.
-- **Trainer** tab: PLL and OLL drills. You get a face-turn setup, solve the case, and per-case times are tracked. Slow and new cases come up more often. Attempts are stored as solves with mode `pll`/`oll` and a `case_id`. Algs are in `public/algs.js`.
+- **Trainer** tab: 2-look OLL (edges, then corners), 2-look PLL (corners, then edges), full OLL and full PLL drills. You get a face-turn setup, solve the case, and per-case times are tracked. Slow and new cases come up more often. Attempts are stored as solves with mode `oll2`/`pll2`/`oll`/`pll` and a `case_id`. Algs are in `public/algs.js`.
 - **Daily scramble**: one shared scramble per day, one attempt each. Others' times show once you've done yours.
 - **Races**: create a race, share the `#race=CODE` link; everyone gets the same scramble.
 - **Installable / offline**: PWA manifest + service worker. Offline, the app opens with the last known account and solves, and queues new solves until the server is back.

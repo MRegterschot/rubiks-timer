@@ -2,6 +2,27 @@
 
 // Trainer case sets: [id, name, alg]
 const ALGS = {
+  // 2-look sets: [id, name, alg, diagram style]; step 1 cases grey out what that step ignores
+  oll2: [
+    ['Dot', 'Dot (edges)', "F R U R' U' F' f R U R' U' f'", 'eo'],
+    ['L', 'L-shape (edges)', "f R U R' U' f'", 'eo'],
+    ['Line', 'Line (edges)', "F R U R' U' F'", 'eo'],
+    ['Sune', 'Sune', "R U R' U R U2 R'"],
+    ['Anti', 'Antisune', "R U2 R' U' R U' R'"],
+    ['H', 'H', "R U2 R' U' R U R' U' R U' R'"],
+    ['Pi', 'Pi', "R U2 R2 U' R2 U' R2 U2 R"],
+    ['Head', 'Headlights', "R2 D' R U2 R' D R U2 R"],
+    ['T', 'Chameleon', "r U R' U' r' F R F'"],
+    ['Bow', 'Bowtie', "F' r U R' U' r' F R"],
+  ],
+  pll2: [
+    ['Adj', 'Adjacent corners', "R U R' U' R' F R2 U' R' U' R U R' F'", 'cp'],
+    ['Diag', 'Diagonal corners', "F R U' R' U' R U R' F' R U R' U' R' F R F'", 'cp'],
+    ['Ua', 'Ua', "M2 U M U2 M' U M2"],
+    ['Ub', 'Ub', "M2 U' M U2 M' U' M2"],
+    ['H', 'H', 'M2 U M2 U2 M2 U M2'],
+    ['Z', 'Z', "M' U M2 U M2 U M' U2 M2"],
+  ],
   pll: [
     ['Aa', 'Aa', "x R' U R' D2 R U' R' D2 R2 x'"],
     ['Ab', 'Ab', "x R2 D2 R U R' D2 R U' R x'"],

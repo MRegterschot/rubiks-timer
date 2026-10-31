@@ -148,9 +148,16 @@ const Cube = (() => {
   // ---------- last-layer diagrams ----------
   const COLORS = { U: 'var(--y)', D: 'var(--w)', F: 'var(--g)', B: 'var(--b)', R: 'var(--r)', L: 'var(--o)' };
   const at = (f, r, c) => FACES.indexOf(f) * 9 + r * 3 + c;
-  // Top view of the U layer plus the side stickers; OLL style greys out everything but the top colour
-  function llSvg(state, oll, size = 96) {
-    const fill = (i) => { const c = colorOf(state[i]); return oll ? (c === 'U' ? 'var(--y)' : '#2a2e3a') : COLORS[c]; };
+  const GREY = '#2a2e3a';
+  // Top view of the U layer plus side stickers. Styles: pll (all colours), oll (top colour only),
+  // eo / cp (2-look first steps: like oll / pll but corners / edges greyed out)
+  function llSvg(state, style, size = 96) {
+    const corner = (i) => (i % 9) % 2 === 0 && i % 9 !== 4, edge = (i) => (i % 9) % 2 === 1;
+    const fill = (i) => {
+      if ((style === 'eo' && corner(i)) || (style === 'cp' && edge(i))) return GREY;
+      const c = colorOf(state[i]);
+      return style === 'oll' || style === 'eo' ? (c === 'U' ? 'var(--y)' : GREY) : COLORS[c];
+    };
     const u = size / 5.2, gap = u * 0.08, side = u * 0.42, o = side + gap * 2;
     let g = '';
     const sq = (x, y, w, h, i) => { g += `<rect x="${x + gap / 2}" y="${y + gap / 2}" width="${w - gap}" height="${h - gap}" rx="${u * 0.12}" fill="${fill(i)}"/>`; };

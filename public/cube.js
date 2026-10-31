@@ -172,6 +172,21 @@ const Cube = (() => {
     return `<svg class="ll" viewBox="0 0 ${w} ${w}" width="${size}" height="${size}" aria-hidden="true">${g}</svg>`;
   }
 
-  return { solved, apply, faceMoves, fmtMoves, invert, simplify, setup, memo, memoSolves, llSvg, colorOf, at };
+  // Unfolded net (U on top, L F R B across, D below) in real WCA colours; hi outlines the face just turned
+  const NET = { U: [3, 0], L: [0, 3], F: [3, 3], R: [6, 3], B: [9, 3], D: [3, 6] };
+  const REAL = { U: 'var(--w)', D: 'var(--y)', F: 'var(--g)', B: 'var(--b)', R: 'var(--r)', L: 'var(--o)' };
+  function netSvg(state, cell = 16, hi = null) {
+    let g = '';
+    for (const f of FACES) {
+      const [fx, fy] = NET[f];
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+        g += `<rect x="${(fx + c) * cell + 1}" y="${(fy + r) * cell + 1}" width="${cell - 2}" height="${cell - 2}" rx="${cell * 0.18}" fill="${REAL[colorOf(state[at(f, r, c)])]}"/>`;
+      }
+      if (f === hi) g += `<rect class="net-hi" x="${fx * cell - 1}" y="${fy * cell - 1}" width="${3 * cell + 2}" height="${3 * cell + 2}" rx="${cell * 0.3}"/>`;
+    }
+    return `<svg class="net" viewBox="-3 -3 ${12 * cell + 6} ${9 * cell + 6}" width="${12 * cell + 6}" height="${9 * cell + 6}" role="img" aria-label="Cube net">${g}</svg>`;
+  }
+
+  return { netSvg, solved, apply, faceMoves, fmtMoves, invert, simplify, setup, memo, memoSolves, llSvg, colorOf, at };
 })();
 if (typeof module !== 'undefined') module.exports = Cube;

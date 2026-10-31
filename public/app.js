@@ -42,7 +42,7 @@ function fmt(ms) {
 const eff = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
 const fmtSolve = (s) => (s.penalty === 'DNF' ? 'DNF' : fmt(eff(s)) + (s.penalty === '+2' ? '+' : ''));
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m[0]}" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
+const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m[0]}" tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
 
 // ---------- scramble ----------
 function genScramble() {
@@ -63,6 +63,7 @@ function genScramble() {
   return moves.join(' ');
 }
 function newScramble() {
+  closeViewer();
   let label = '';
   if (challenge && mode === '333') scramble = challenge.scramble;
   else if (isTrain()) {
@@ -74,6 +75,75 @@ function newScramble() {
   $('scramble').innerHTML = label + chips(scramble);
   hideMemoResult();
 }
+
+// ---------- move viewer: click a move chip to see the cube after it ----------
+const viewer = document.createElement('div');
+viewer.className = 'mv';
+viewer.hidden = true;
+let mvSrc = null, mvMoves = [], mvStart = null, mvPos = 0;
+const FACE_NAME = { U: 'top', D: 'bottom', L: 'left', R: 'right', F: 'front', B: 'back' };
+function describeMove(m) {
+  const amt = /2'?$/.test(m) ? 'half turn' : m.endsWith("'") ? 'counter-clockwise' : 'clockwise', f = m[0];
+  if ('xyz'.includes(f)) return `turn the whole cube (${f} axis), ${amt}`;
+  if ('MES'.includes(f)) return `${{ M: 'middle', E: 'equator', S: 'standing' }[f]} slice, ${amt}`;
+  const wide = f !== f.toUpperCase() || m.includes('w');
+  return `${FACE_NAME[f.toUpperCase()]} ${wide ? 'two layers' : 'face'}, ${amt}`;
+}
+const chipsOf = (src) => [...src.querySelectorAll(':scope > span')];
+function markChips(src, pos) {
+  chipsOf(src).forEach((c, i) => { c.classList.toggle('mv-on', i === pos - 1); c.classList.toggle('mv-done', i < pos - 1); });
+}
+function renderViewer() {
+  const p = mvPos, mv = mvMoves[p - 1];
+  let st;
+  try { st = Cube.apply(mvStart, mvMoves.slice(0, p).join(' ')); } catch { closeViewer(); return; }
+  const face = mv && /^[UDLRFBudlrfb]/.test(mv) ? mv[0].toUpperCase() : null;
+  const startText = mvSrc.dataset.start ? 'The case, before the first move' : 'Solved cube: white on top, green in front';
+  viewer.innerHTML = `${Cube.netSvg(st, 16, face)}
+    <div class="mv-side">
+      <span class="mv-step">${p ? `Move ${p} of ${mvMoves.length}` : 'Start'}</span>
+      <div class="mv-move">${p ? `<b>${esc(mv)}</b><span>${describeMove(mv)}</span>` : `<span>${startText}</span>`}</div>
+      <div class="mv-btns">
+        <button type="button" data-mv="first" aria-label="Back to start"${p ? '' : ' disabled'}>⏮</button>
+        <button type="button" data-mv="prev"${p ? '' : ' disabled'}>‹ Prev</button>
+        <button type="button" data-mv="next"${p < mvMoves.length ? '' : ' disabled'}>Next ›</button>
+        <button type="button" data-mv="last" aria-label="Jump to end"${p < mvMoves.length ? '' : ' disabled'}>⏭</button>
+        <button type="button" data-mv="close" class="mv-x" aria-label="Close">✕</button>
+      </div>
+    </div>`;
+  markChips(mvSrc, p);
+}
+function openViewer(src, i) {
+  if (mvSrc && mvSrc !== src) markChips(mvSrc, 0);
+  try { mvStart = Cube.apply(Cube.solved(), src.dataset.start || ''); } catch { return; }
+  mvSrc = src;
+  mvMoves = chipsOf(src).map((c) => c.textContent);
+  mvPos = i + 1;
+  src.after(viewer);
+  viewer.hidden = false;
+  renderViewer();
+}
+function closeViewer() {
+  if (!mvSrc) return;
+  viewer.hidden = true;
+  if (mvSrc.isConnected) markChips(mvSrc, 0);
+  mvSrc = null;
+}
+function stepViewer(act) {
+  if (act === 'close') return closeViewer();
+  mvPos = { first: 0, prev: Math.max(0, mvPos - 1), next: Math.min(mvMoves.length, mvPos + 1), last: mvMoves.length }[act];
+  renderViewer();
+}
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.moves > span');
+  if (chip && (state === 'idle' || state === 'stopped')) {
+    const src = chip.parentElement, i = chipsOf(src).indexOf(chip);
+    if (mvSrc === src && mvPos === i + 1) closeViewer(); else openViewer(src, i);
+    return;
+  }
+  const b = e.target.closest('[data-mv]');
+  if (b && viewer.contains(b)) stepViewer(b.dataset.mv);
+});
 
 // ---------- stats ----------
 const bestSolve = (list = solves) => list.reduce((b, s) => (eff(s) !== null && (!b || eff(s) < eff(b)) ? s : b), null);
@@ -493,7 +563,7 @@ function showTrainLast(s) {
   if (!c) return;
   const el = $('train-last');
   el.hidden = false;
-  el.innerHTML = `<div class="card tl">${caseSvg(s.mode, c[0], 76)}<div class="tl-body"><span>That was</span><b>${c[1]}</b><div class="alg">${chips(c[2])}</div></div><b class="tl-time">${fmtSolve(s)}</b></div>`;
+  el.innerHTML = `<div class="card tl">${caseSvg(s.mode, c[0], 76)}<div class="tl-body"><span>That was</span><b>${c[1]}</b><div class="alg moves" data-start="${esc(Cube.fmtMoves(Cube.invert(Cube.faceMoves(c[2]))))}">${chips(c[2])}</div></div><b class="tl-time">${fmtSolve(s)}</b></div>`;
 }
 $('train-set').onclick = (e) => {
   const b = e.target.closest('button');
@@ -749,6 +819,7 @@ function pinTimer(on) {
   if (!on) timerEl.scrollIntoView({ block: 'center' });
 }
 const setState = (s) => {
+  if (['holding', 'ready', 'inspecting', 'running'].includes(s)) closeViewer();
   state = s;
   document.body.dataset.state = s;
   pinTimer(['holding', 'ready', 'inspecting', 'running'].includes(s));
@@ -930,6 +1001,11 @@ const authed = () => document.body.dataset.auth === 'in';
 // Timer only listens on the timer tabs with no dialog open
 const timerActive = () => authed() && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
 document.addEventListener('keydown', (e) => {
+  if (mvSrc && state === 'idle' && !typing() && !document.querySelector('dialog[open]')) {
+    const act = { ArrowLeft: 'prev', ArrowRight: 'next', Home: 'first', End: 'last', Escape: 'close' }[e.key];
+    if (act) { e.preventDefault(); stepViewer(act); return; }
+    if (e.key === 'Enter' && e.target.closest?.('.moves > span')) { e.preventDefault(); e.target.click(); return; }
+  }
   if (!timerActive()) return;
   // Auto-repeat while holding space would otherwise scroll the page
   if (e.repeat) { if (e.code === 'Space' && !typing()) e.preventDefault(); return; }

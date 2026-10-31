@@ -91,6 +91,12 @@ kbd { font: 600 .75rem var(--mono); padding: 2px 7px; border-radius: 6px; border
 .stat b { font: 600 1.35rem var(--mono); font-variant-numeric: tabular-nums; }
 .stat:nth-child(1) b { color: var(--y); }
 
+/* Toast */
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 50; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; max-width: calc(100vw - 32px);
+  padding: 12px 18px; border-radius: 14px; font-size: .9rem; background: rgba(16,18,25,.97); border: 1px solid color-mix(in srgb, var(--g) 45%, transparent);
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,.8); transition: opacity .25s, transform .25s; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
 /* Confirm dialog */
 .dialog.narrow { width: min(380px, calc(100vw - 28px)); }
 .confirm-title { font-size: 1.1rem; text-transform: none; letter-spacing: -.01em; color: var(--text); font-weight: 700; }

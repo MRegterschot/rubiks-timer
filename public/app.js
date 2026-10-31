@@ -958,6 +958,36 @@ const CH_KEY = 'pending-challenges';
 let chOpenAfter = null, chFlushing = false;
 function loadChQueue() { try { return JSON.parse(localStorage.getItem(CH_KEY)) || []; } catch { return []; } }
 const saveChQueue = (list) => localStorage.setItem(CH_KEY, JSON.stringify(list));
+// Guest runs move into the save queues of the account that just logged in or signed up
+function adoptGuestRuns(username) {
+  const queued = [];
+  for (const [m, list] of Object.entries(guestSolves)) {
+    for (const { id, ...s } of list.slice().reverse()) queued.push({ ...s, mode: m, client_id: newClientId(), user: username, pending: true });
+  }
+  for (const k of Object.keys(guestSolves)) delete guestSolves[k];
+  if (queued.length) savePending([...loadPending(), ...queued]);
+  let daily = false;
+  try {
+    const g = JSON.parse(localStorage.getItem(GUEST_DAILY));
+    if (g) {
+      saveChQueue([...loadChQueue(), { code: `daily-${g.day}`, time_ms: g.time_ms, penalty: g.penalty, user: username, quiet: true }]);
+      daily = true;
+    }
+  } catch { /* nothing to carry over */ }
+  localStorage.removeItem(GUEST_DAILY);
+  if (!queued.length && !daily) return '';
+  const parts = [queued.length && `${queued.length} solve${queued.length === 1 ? '' : 's'}`, daily && 'your daily scramble result'].filter(Boolean);
+  return `Saved ${parts.join(' and ')} from before you logged in.`;
+}
+let toastT = 0;
+function toast(msg) {
+  let el = $('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.append(el); }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 4500);
+}
 function queueChallenge(code, body, open) {
   saveChQueue([...loadChQueue(), { code, ...body, user: $('who').textContent }]);
   if (open) chOpenAfter = code;
@@ -972,7 +1002,8 @@ async function flushChallenges() {
       try { view = await api('POST', `/api/challenges/${x.code}/result`, { time_ms: x.time_ms, penalty: x.penalty }); }
       catch (e) {
         if (!(e.status >= 400 && e.status < 500 && ![401, 408, 429].includes(e.status))) return; // retried with the solve queue
-        alert(`Could not submit to the ${x.code.startsWith('daily-') ? 'daily scramble' : 'race'}: ${e.message}`);
+        // Guest dailies carried over at login are dropped quietly if the account already played it
+        if (!x.quiet) alert(`Could not submit to the ${x.code.startsWith('daily-') ? 'daily scramble' : 'race'}: ${e.message}`);
       }
       saveChQueue(loadChQueue().filter((c) => !(c.code === x.code && c.user === me)));
       if (view?.kind === 'daily') updateDaily(view);
@@ -1144,7 +1175,9 @@ $('auth-form').onsubmit = async (e) => {
     const { user } = await api('POST', `/api/${authMode}`, body);
     const wasReset = authMode === 'reset';
     setAuthMode('login');
+    const adopted = adoptGuestRuns(user.username);
     signedIn(user);
+    if (adopted) toast(adopted);
     if (wasReset) openAccount('Password reset. That recovery code is used up, so create a new one.');
   } catch (err) { $('auth-error').textContent = err.message; }
   btn.disabled = false;
@@ -1334,7 +1367,7 @@ function renderChallenge() {
   const daily = v.kind === 'daily', allDone = v.results.length > 1 && v.results.every((r) => r.done);
   $('ch-title').textContent = daily ? 'Daily scramble' : `Race${v.created_by ? ` by ${v.created_by}` : ''}`;
   $('ch-sub').textContent = daily
-    ? `${new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · one attempt each. Times show once you've done yours.${isGuest() ? " You're not logged in, so your result stays on this device and others won't see it." : ''}`
+    ? `${new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · one attempt each. Times show once you've done yours.${isGuest() ? " You're not logged in: your result stays on this device until you log in or sign up, then it's saved." : ''}`
     : v.done ? (allDone ? 'Everyone finished.' : 'Waiting for the others. This updates by itself.') : 'Solve it, then see how everyone did.';
   $('ch-share').hidden = daily;
   $('ch-link').textContent = raceUrl(v.code);

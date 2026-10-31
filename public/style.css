@@ -332,6 +332,7 @@ button.link:hover { background: none; color: var(--text); }
 .acct-form .dialog-sub { margin: 8px 0 0; }
 .acct-form h3 + .dialog-sub { margin: -4px 0 12px; }
 button.primary.alt { background: var(--glass-hi); color: var(--text); border: 1px solid var(--line); box-shadow: none; }
+#ch-start + #ch-share-daily { margin-top: 8px; }
 button.primary.alt:hover { background: var(--glass-hi); color: var(--text); border-color: rgba(255,255,255,.25); }
 .rc-code { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; background: rgba(0,0,0,.35); border: 1px dashed color-mix(in srgb, var(--g) 50%, transparent); }
 .rc-code code { flex: 1; font: 700 1rem var(--mono); letter-spacing: .06em; color: var(--g); word-break: break-all; }

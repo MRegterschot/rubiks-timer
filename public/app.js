@@ -972,7 +972,7 @@ function setMode(m) {
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
 const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train' })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
-  if (applyInviteLink() || applyRaceLink()) return;
+  if (applyInviteLink() || applyRaceLink() || applyDailyLink()) return;
   setMode(modeFromHash());
 });
 
@@ -1013,6 +1013,7 @@ function signedIn(user) {
   flushPending();
   refreshDaily();
   applyRaceLink();
+  applyDailyLink();
 }
 document.querySelectorAll('[data-auth-mode]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.authMode); });
 $('auth-form').onsubmit = async (e) => {
@@ -1206,6 +1207,8 @@ function renderChallenge() {
   $('ch-link').textContent = raceUrl(v.code);
   $('ch-start').hidden = v.done;
   $('ch-start').textContent = daily ? 'Start: one attempt' : 'Start solve';
+  $('ch-share-daily').hidden = !daily;
+  $('ch-share-daily').textContent = v.done ? 'Share my result' : 'Share with friends';
   const ranked = rankResults(v.results);
   const winner = !daily && allDone && resultMs(ranked[0]) !== null ? ranked[0] : null;
   $('ch-results').innerHTML = ranked.length ? ranked.map((r, i) => {
@@ -1250,13 +1253,47 @@ $('ch-results').onclick = async (e) => {
   } catch (err) { $('ch-error').textContent = err.message; }
 };
 
-$('daily-btn').onclick = async () => {
+async function openDaily() {
   try {
     const v = await api('GET', '/api/daily');
     updateDaily(v);
     openChallenge(v);
   } catch (e) { alert(e.message); }
+}
+$('daily-btn').onclick = openDaily;
+// Wordle-style share: your time and rank once done, otherwise an invite to play
+function dailyShareText(v) {
+  const day = new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const mine = v.results.find((r) => r.me && r.done);
+  if (!mine) return `Today's Cube Timer daily scramble (${day}): one attempt, same scramble for everyone. Join me!`;
+  const done = v.results.filter((r) => r.done).length;
+  const rank = rankResults(v.results).indexOf(mine) + 1;
+  const time = mine.penalty === 'DNF' ? 'DNF 😬' : `⏱ ${fmtSolve(mine)}`;
+  return `Cube Timer daily · ${day}\n${time}${mine.penalty === 'DNF' ? '' : ` · #${rank} of ${done}${rank === 1 ? ' 🏆' : ''}`}\nCan you beat it?`;
+}
+$('ch-share-daily').onclick = async () => {
+  const btn = $('ch-share-daily'), text = dailyShareText(chView), url = `${location.origin}/#daily`;
+  try {
+    if (navigator.share) await navigator.share({ title: 'Cube Timer daily scramble', text, url });
+    else {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      const label = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = label; }, 1500);
+    }
+  } catch { /* share sheet dismissed */ }
 };
+// #daily links open today's daily, after logging in if needed
+function applyDailyLink() {
+  const linked = location.hash === '#daily' || sessionStorage.getItem('daily-link');
+  if (!linked) return false;
+  if (location.hash === '#daily') history.replaceState(null, '', location.pathname);
+  if (!authed()) { sessionStorage.setItem('daily-link', '1'); return true; }
+  sessionStorage.removeItem('daily-link');
+  if (mode !== '333') setMode('333');
+  openDaily();
+  return true;
+}
 async function loadRaces() {
   const ul = $('race-list');
   try {
@@ -1396,6 +1433,7 @@ renderMemo();
 setAuthMode('login');
 applyInviteLink();
 applyRaceLink();
+applyDailyLink();
 api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
   // Offline or server restarting: keep working with the last known account; solves queue until it's back
   let cached = null;

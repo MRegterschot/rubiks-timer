@@ -72,7 +72,7 @@ function newScramble() {
     label = '<em class="scr-label">Setup</em>';
   } else scramble = genScramble();
   $('scramble').innerHTML = label + chips(scramble);
-  $('memo-result').hidden = true;
+  hideMemoResult();
 }
 
 // ---------- stats ----------
@@ -697,10 +697,20 @@ function memoCheck(s) {
   }
   return memoCache.get(k);
 }
-function showMemoResult(html) {
+// The reveal button toggles, so its label follows whether the solution is what's on screen
+function setRevealLabel(open) {
+  $('memo-reveal').dataset.open = open ? '1' : '';
+  $('memo-reveal').textContent = open ? 'Hide solution' : 'Show solution';
+}
+function hideMemoResult() {
+  $('memo-result').hidden = true;
+  setRevealLabel(false);
+}
+function showMemoResult(html, solution = false) {
   const el = $('memo-result');
   el.innerHTML = html;
   el.hidden = false;
+  setRevealLabel(solution);
 }
 $('memo-verify').onclick = () => {
   const e = letters(memoInputs.edges.value), c = letters(memoInputs.corners.value);
@@ -710,9 +720,10 @@ $('memo-verify').onclick = () => {
   showMemoResult(`${tag(okE, 'Edges')} ${tag(okC, 'Corners')}${okE && okC ? '<small>Your memo solves this scramble.</small>' : '<small>Wrong pieces or order. Try again, or show the solution.</small>'}`);
 };
 $('memo-reveal').onclick = () => {
+  if ($('memo-reveal').dataset.open) return hideMemoResult();
   const e = Cube.memo(scramble, 'e'), c = Cube.memo(scramble, 'c');
   showMemoResult(`<span class="memo-sol e">Edges <b>${pairUp(e)}</b></span><span class="memo-sol c">Corners <b>${pairUp(c)}</b></span>
-    <small>${e.length % 2 ? 'Parity needed. ' : ''}Buffers UR and ULB; cycle breaks go to the lowest free letter, so yours may differ and still be right.</small>`);
+    <small>${e.length % 2 ? 'Parity needed. ' : ''}Buffers UR and ULB; cycle breaks go to the lowest free letter, so yours may differ and still be right.</small>`, true);
 };
 $('parity-alg').innerHTML = chips(PARITY_ALG);
 $('edge-alg').innerHTML = chips(EDGE_ALG);

@@ -81,6 +81,15 @@
     <ul id="invite-list" class="invite-list"></ul>
   </dialog>
 
+  <dialog id="confirm-dialog" class="dialog narrow">
+    <h2 id="confirm-title" class="confirm-title"></h2>
+    <p id="confirm-text" class="dialog-sub"></p>
+    <div class="confirm-btns">
+      <button id="confirm-no" type="button" autofocus>Cancel</button>
+      <button id="confirm-yes" type="button" class="danger-solid">Delete</button>
+    </div>
+  </dialog>
+
   <dialog id="account-dialog" class="dialog">
     <div class="dialog-head">
       <h2>Password &amp; recovery</h2>
@@ -247,7 +256,6 @@
     <section class="solves chrome">
       <div class="solves-head">
         <h2>Solves</h2>
-        <button id="clear" class="danger">Clear all</button>
       </div>
       <p class="guest-note guest-only">Not logged in: solves aren't saved and are gone when you close the page. <button type="button" class="link inline" data-login="login">Log in</button> or <button type="button" class="link inline" data-login="register">sign up</button> to keep them.</p>
       <ul id="list"></ul>

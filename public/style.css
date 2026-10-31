@@ -91,6 +91,13 @@ kbd { font: 600 .75rem var(--mono); padding: 2px 7px; border-radius: 6px; border
 .stat b { font: 600 1.35rem var(--mono); font-variant-numeric: tabular-nums; }
 .stat:nth-child(1) b { color: var(--y); }
 
+/* Confirm dialog */
+.dialog.narrow { width: min(380px, calc(100vw - 28px)); }
+.confirm-title { font-size: 1.1rem; text-transform: none; letter-spacing: -.01em; color: var(--text); font-weight: 700; }
+.confirm-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.confirm-btns button { min-height: 40px; padding: 8px 16px; font-size: .88rem; }
+button.danger-solid { background: var(--r); border-color: var(--r); color: #fff; font-weight: 700; }
+button.danger-solid:hover { background: color-mix(in srgb, var(--r) 85%, #fff); border-color: var(--r); color: #fff; }
 .solves-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 li { display: flex; align-items: center; gap: 8px; background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px 8px 16px;

@@ -679,7 +679,11 @@ function render() {
     del.textContent = '✕';
     del.className = 'danger';
     del.setAttribute('aria-label', 'Delete solve');
-    del.onclick = () => removeSolve(s.id);
+    del.onclick = async () => {
+      const c = s.case_id && caseById(s.mode, s.case_id);
+      const what = `${fmtSolve(s)}${c ? ` (${c[1]})` : ''} from ${sessionDay(s.created_at).replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())} at ${fmtClock(s.created_at)}`;
+      if (await askConfirm('Delete this solve?', `${what} will be removed for good. This can't be undone.`)) removeSolve(s.id);
+    };
     li.appendChild(del);
     ul.appendChild(li);
   });
@@ -701,18 +705,20 @@ async function removeSolve(id) {
   try { await api('DELETE', `/api/solves/${id}`); solves = solves.filter((s) => s.id !== id); render(); }
   catch (e) { alert(e.message); }
 }
-$('clear').onclick = async () => {
-  const label = MODE_LABEL[mode];
-  if (!solves.length || !confirm(`Delete ALL ${label} solves? This cannot be undone.`)) return;
-  if (isGuest()) { solves = guestSolves[mode] = []; render(); return; }
-  try {
-    await api('DELETE', `/api/solves?mode=${mode}`);
-    const me = $('who').textContent;
-    savePending(loadPending().filter((p) => !(p.user === me && p.mode === mode)));
-    solves = [];
-    render();
-  } catch (e) { alert(e.message); }
-};
+// In-app confirm; resolves true only when the confirm button is pressed
+function askConfirm(title, text, yes = 'Delete') {
+  const dlg = $('confirm-dialog');
+  $('confirm-title').textContent = title;
+  $('confirm-text').textContent = text;
+  $('confirm-yes').textContent = yes;
+  dlg.returnValue = '';
+  dlg.showModal();
+  $('confirm-no').focus();
+  return new Promise((done) => dlg.addEventListener('close', () => done(dlg.returnValue === 'yes'), { once: true }));
+}
+$('confirm-yes').onclick = () => $('confirm-dialog').close('yes');
+$('confirm-no').onclick = () => $('confirm-dialog').close();
+$('confirm-dialog').addEventListener('click', (e) => { if (e.target === $('confirm-dialog')) $('confirm-dialog').close(); });
 
 // ---------- memo (BLD letters) ----------
 const memoInputs = { edges: $('edges'), corners: $('corners') };

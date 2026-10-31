@@ -160,10 +160,17 @@ li .sub { font: 400 .74rem var(--mono); color: var(--dim); overflow: hidden; tex
 li .sub .e { color: color-mix(in srgb, var(--b) 75%, var(--text)); } li .sub .c { color: color-mix(in srgb, var(--o) 75%, var(--text)); }
 
 /* Accounts */
+/* auth: pending | in | guest (app without account) | out (login form shown) */
 body[data-auth="pending"] :is(#app, #auth, .tabs, .right) { visibility: hidden; }
-body:not([data-auth="in"]) #app { display: none; }
-body:not([data-auth="in"]) :is(.tabs, .right) { visibility: hidden; }
+body:is([data-auth="out"], [data-auth="pending"]) #app { display: none; }
+body[data-auth="out"] :is(.tabs, .right) { visibility: hidden; }
 body:not([data-auth="out"]) #auth { display: none; }
+body:not([data-auth="guest"]) .guest-only, body:not([data-auth="in"]) .in-only { display: none !important; }
+.login-btn { border-radius: 99px; padding: 7px 16px; color: var(--text); border-color: color-mix(in srgb, var(--g) 45%, transparent); }
+.login-btn:hover { border-color: var(--g); color: var(--g); background: color-mix(in srgb, var(--g) 10%, transparent); }
+.guest-note { margin: -4px 0 12px; padding: 10px 14px; border-radius: 12px; font-size: .84rem; color: var(--dim); border: 1px dashed var(--line); }
+button.link.inline { display: inline; margin: 0; padding: 0; font-size: inherit; color: var(--text); }
+.auth-reason { margin: -10px 0 18px; padding: 8px 12px; border-radius: 10px; text-align: center; font-size: .84rem; color: var(--y); background: color-mix(in srgb, var(--y) 10%, transparent); }
 #auth[data-mode="login"] .reg-only { display: none; }
 .right { justify-self: end; display: flex; align-items: center; gap: 14px; }
 .user { position: relative; }

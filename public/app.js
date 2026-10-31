@@ -684,7 +684,12 @@ function render() {
     ul.appendChild(li);
   });
 }
+// Guests keep solves in memory per mode only; nothing is sent to the server
+const guestSolves = {};
+let guestId = 0;
+const isGuest = () => document.body.dataset.auth === 'guest';
 async function setPenalty(id, penalty) {
+  if (isGuest()) { solves = guestSolves[mode] = solves.map((s) => (s.id === id ? { ...s, penalty } : s)); render(); return; }
   try {
     const upd = await api('PATCH', `/api/solves/${id}`, { penalty });
     solves = solves.map((s) => (s.id === id ? upd : s));
@@ -692,12 +697,14 @@ async function setPenalty(id, penalty) {
   } catch (e) { alert(e.message); }
 }
 async function removeSolve(id) {
+  if (isGuest()) { solves = guestSolves[mode] = solves.filter((s) => s.id !== id); render(); return; }
   try { await api('DELETE', `/api/solves/${id}`); solves = solves.filter((s) => s.id !== id); render(); }
   catch (e) { alert(e.message); }
 }
 $('clear').onclick = async () => {
   const label = MODE_LABEL[mode];
   if (!solves.length || !confirm(`Delete ALL ${label} solves? This cannot be undone.`)) return;
+  if (isGuest()) { solves = guestSolves[mode] = []; render(); return; }
   try {
     await api('DELETE', `/api/solves?mode=${mode}`);
     const me = $('who').textContent;
@@ -876,11 +883,14 @@ async function stopRun() {
   }
   newScramble();
   // Queue first so the solve survives a failed request, a deploy or a reload
-  const p = { ...body, client_id: newClientId(), created_at: Date.now(), user: $('who').textContent, pending: true };
+  const guest = isGuest();
+  const p = guest ? { ...body, id: --guestId, created_at: Date.now() }
+    : { ...body, client_id: newClientId(), created_at: Date.now(), user: $('who').textContent, pending: true };
   const prevBest = isTrain() ? null : bestSolve();
   isPb = eff(p) !== null && prevBest && eff(p) < eff(prevBest);
-  savePending([...loadPending(), p]);
+  if (!guest) savePending([...loadPending(), p]);
   solves.unshift(p);
+  if (guest) guestSolves[mode] = solves;
   render();
   if (mode === 'bld') clearMemo();
   if (p.penalty === 'DNF') timerEl.textContent = 'DNF';
@@ -889,7 +899,7 @@ async function stopRun() {
   if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
   if (isTrain()) showTrainLast(p);
   if (ch) queueChallenge(ch.code, { time_ms: ms, penalty: p.penalty }, true);
-  flushPending();
+  if (!guest) flushPending();
 }
 
 // ---------- offline-safe saving ----------
@@ -999,7 +1009,7 @@ function release() {
 const typing = () => document.activeElement?.tagName === 'INPUT' && ['text', 'password'].includes(document.activeElement.type);
 const authed = () => document.body.dataset.auth === 'in';
 // Timer only listens on the timer tabs with no dialog open
-const timerActive = () => authed() && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
+const timerActive = () => (authed() || isGuest()) && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
 document.addEventListener('keydown', (e) => {
   if (mvSrc && state === 'idle' && !typing() && !document.querySelector('dialog[open]')) {
     const act = { ArrowLeft: 'prev', ArrowRight: 'next', Home: 'first', End: 'last', Escape: 'close' }[e.key];
@@ -1044,6 +1054,7 @@ function setMode(m) {
   render();
   newScramble();
   if (authed()) load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
+  else { solves = guestSolves[m] || []; render(); }
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
 const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train' })[location.hash] || '333';
@@ -1070,12 +1081,31 @@ function setAuthMode(m) {
 }
 $('auth-forgot').onclick = () => setAuthMode(authMode === 'reset' ? 'login' : 'reset');
 let meUser = null;
-function showAuth() {
-  document.body.dataset.auth = 'out';
+// Use the app without an account; solves stay in memory only
+function goGuest() {
+  meUser = null;
   localStorage.removeItem('me');
-  solves = [];
+  $('who').textContent = '';
+  document.body.dataset.auth = 'guest';
+  setMode(modeFromHash() === 'board' ? 'board' : mode);
+  $('daily-sub').textContent = 'Log in to play';
+  $('daily-btn').classList.remove('done');
+}
+// Login form; reason explains why (e.g. a race link needs an account)
+function showLogin(authView = 'login', reason = '') {
+  if (state !== 'idle' && state !== 'stopped') return;
+  if (document.body.dataset.auth === 'in') { localStorage.removeItem('me'); solves = []; }
+  setAuthMode(authView);
+  $('auth-reason').textContent = reason;
+  $('auth-reason').hidden = !reason;
+  document.body.dataset.auth = 'out';
+  window.scrollTo(0, 0);
   setTimeout(() => $('auth-user').focus(), 50);
 }
+const showAuth = () => showLogin('login', 'Your login expired. Log in again to keep saving solves.');
+$('auth-guest').onclick = () => { sessionStorage.removeItem('race-link'); sessionStorage.removeItem('daily-link'); goGuest(); };
+$('login-btn').onclick = () => showLogin();
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-login]'); if (b) showLogin(b.dataset.login); });
 function signedIn(user) {
   meUser = user;
   localStorage.setItem('me', JSON.stringify(user));
@@ -1120,7 +1150,7 @@ $('logout').onclick = async () => {
   await api('POST', '/api/logout').catch(() => {});
   clearMemo(); // memo notes are per device; don't leave them for the next person
   for (const k of Object.keys(localStorage)) if (k.startsWith('solves:')) localStorage.removeItem(k);
-  showAuth();
+  goGuest();
 };
 
 // ---------- invites ----------
@@ -1180,11 +1210,13 @@ $('invite-create').onclick = async () => {
 
 // Invite links (#invite=CODE) open the sign-up form with the code filled in
 function applyInviteLink() {
-  const code = (location.hash.match(/^#invite=([A-Za-z0-9_-]+)$/) || [])[1];
+  const code = (location.hash.match(/^#invite=([A-Za-z0-9_-]+)$/) || [])[1] || sessionStorage.getItem('invite-link');
   if (!code) return false;
-  history.replaceState(null, '', location.pathname);
+  if (location.hash.startsWith('#invite=')) history.replaceState(null, '', location.pathname);
+  if (document.body.dataset.auth === 'pending') { sessionStorage.setItem('invite-link', code); return true; } // wait for /api/me
+  sessionStorage.removeItem('invite-link');
   if (authed()) return true; // already has an account
-  setAuthMode('register');
+  showLogin('register', "You've been invited! Pick a username and password.");
   $('auth-invite').value = code;
   return true;
 }
@@ -1336,7 +1368,7 @@ async function openDaily() {
     openChallenge(v);
   } catch (e) { alert(e.message); }
 }
-$('daily-btn').onclick = openDaily;
+$('daily-btn').onclick = () => (isGuest() ? showLogin('login', 'Log in or sign up to play the daily scramble.') : openDaily());
 // Wordle-style share: your time and rank once done, otherwise an invite to play
 function dailyShareText(v) {
   const day = new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -1364,7 +1396,11 @@ function applyDailyLink() {
   const linked = location.hash === '#daily' || sessionStorage.getItem('daily-link');
   if (!linked) return false;
   if (location.hash === '#daily') history.replaceState(null, '', location.pathname);
-  if (!authed()) { sessionStorage.setItem('daily-link', '1'); return true; }
+  if (!authed()) {
+    sessionStorage.setItem('daily-link', '1');
+    if (isGuest()) showLogin('login', 'Log in or sign up to play the daily scramble.');
+    return true;
+  }
   sessionStorage.removeItem('daily-link');
   if (mode !== '333') setMode('333');
   openDaily();
@@ -1383,7 +1419,12 @@ async function loadRaces() {
     }).join('');
   } catch (e) { $('race-error').textContent = e.message; }
 }
-$('race-btn').onclick = () => { $('race-error').textContent = ''; $('race-dialog').showModal(); loadRaces(); };
+$('race-btn').onclick = () => {
+  if (isGuest()) return showLogin('login', 'Log in or sign up to race your friends.');
+  $('race-error').textContent = '';
+  $('race-dialog').showModal();
+  loadRaces();
+};
 $('race-close').onclick = () => $('race-dialog').close();
 $('race-dialog').addEventListener('click', (e) => { if (e.target === $('race-dialog')) $('race-dialog').close(); });
 $('race-create').onclick = async () => {
@@ -1401,7 +1442,11 @@ function applyRaceLink() {
   const code = (location.hash.match(/^#race=([A-Za-z0-9_-]{6,32})$/) || [])[1] || sessionStorage.getItem('race-link');
   if (!code) return false;
   if (location.hash.startsWith('#race=')) history.replaceState(null, '', location.pathname);
-  if (!authed()) { sessionStorage.setItem('race-link', code); return true; }
+  if (!authed()) {
+    sessionStorage.setItem('race-link', code);
+    if (isGuest()) showLogin('login', "You've been challenged to a race! Log in or sign up to join.");
+    return true;
+  }
   sessionStorage.removeItem('race-link');
   api('POST', `/api/challenges/${code}/join`).then(openChallenge).catch((e) => alert(e.message));
   return true;
@@ -1514,7 +1559,8 @@ api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
   // Offline or server restarting: keep working with the last known account; solves queue until it's back
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem('me')); } catch { /* none */ }
-  if (cached && e.status !== 401) signedIn(cached); else showAuth();
+  if (cached && e.status !== 401) signedIn(cached);
+  else { goGuest(); applyInviteLink(); applyRaceLink(); applyDailyLink(); }
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

@@ -35,7 +35,8 @@
         <span class="track"><span class="knob"></span></span>
         <span class="label">15s inspection</span>
       </label>
-      <div class="user">
+      <button id="login-btn" type="button" class="login-btn guest-only">Log in</button>
+      <div class="user in-only">
         <button id="user-btn" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Account"></button>
         <div id="user-menu" class="user-menu" role="menu">
           <div class="who">Signed in as <b id="who"></b></div>
@@ -51,7 +52,8 @@
     <form id="auth-form" class="auth-card" novalidate>
       <div class="logo big" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <h2 class="auth-title">Your solves, every device</h2>
-      <p class="auth-sub">Log in to see your own times. Same account on your phone and laptop.</p>
+      <p class="auth-sub">Log in to save your times. Same account on your phone and laptop.</p>
+      <p id="auth-reason" class="auth-reason" hidden></p>
       <div class="seg" role="tablist">
         <button type="button" role="tab" data-auth-mode="login" aria-selected="true">Log in</button>
         <button type="button" role="tab" data-auth-mode="register" aria-selected="false">Sign up</button>
@@ -64,6 +66,7 @@
       <button id="auth-submit" class="primary" type="submit">Log in</button>
       <button id="auth-forgot" class="link" type="button">Forgot password?</button>
       <p class="reset-only auth-note">Lost your recovery code too? Ask the admin to reset your password.</p>
+      <button id="auth-guest" class="link" type="button">Continue without an account</button>
     </form>
   </section>
 
@@ -246,6 +249,7 @@
         <h2>Solves</h2>
         <button id="clear" class="danger">Clear all</button>
       </div>
+      <p class="guest-note guest-only">Not logged in: solves aren't saved and are gone when you close the page. <button type="button" class="link inline" data-login="login">Log in</button> or <button type="button" class="link inline" data-login="register">sign up</button> to keep them.</p>
       <ul id="list"></ul>
     </section>
   </main>

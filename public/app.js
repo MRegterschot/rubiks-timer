@@ -9,7 +9,11 @@ const CORNER_ALG = "R U' R' U' R U R' F' R U R' U' R' F R";
 const $ = (id) => document.getElementById(id);
 const timerEl = $('timer');
 
-let mode = location.hash === '#bld' ? 'bld' : '333';
+const TRAIN = new Set(['pll', 'oll']);
+let trainSet = localStorage.getItem('train-set') === 'oll' ? 'oll' : 'pll';
+let mode = { '#bld': 'bld', '#train': trainSet }[location.hash] || '333';
+const isTrain = () => TRAIN.has(mode);
+const MODE_LABEL = { 333: '3×3', bld: 'blindfolded', pll: 'PLL trainer', oll: 'OLL trainer' };
 let solves = [];
 let scramble = '';
 let state = 'idle'; // idle | holding | ready | inspecting | running | stopped
@@ -23,6 +27,8 @@ let lastStop = 0;
 let memoAt = null; // BLD memo split (ms since start)
 let splitAt = 0;
 let isPb = false;
+let trainCase = null; // trainer case being drilled
+let challenge = null; // { kind, code, scramble } during a daily/race solve
 
 // ---------- formatting ----------
 function fmt(ms) {
@@ -57,8 +63,16 @@ function genScramble() {
   return moves.join(' ');
 }
 function newScramble() {
-  scramble = genScramble();
-  $('scramble').innerHTML = chips(scramble);
+  let label = '';
+  if (challenge && mode === '333') scramble = challenge.scramble;
+  else if (isTrain()) {
+    const [id, , alg] = pickCase();
+    trainCase = id;
+    scramble = Cube.setup(alg, Math.floor(Math.random() * 4), Math.floor(Math.random() * 4));
+    label = '<em class="scr-label">Setup</em>';
+  } else scramble = genScramble();
+  $('scramble').innerHTML = label + chips(scramble);
+  $('memo-result').hidden = true;
 }
 
 // ---------- stats ----------
@@ -344,6 +358,171 @@ window.addEventListener('resize', () => {
   resizeT = setTimeout(() => { for (const id of ['insights', 'profile-insights']) { const r = $(id); if (r._args && r.offsetParent) renderInsights(r, ...r._args); } }, 150);
 });
 
+// ---------- sessions (a new one starts after an hour without solves) ----------
+const SESSION_GAP = 60 * 60e3;
+let showAllSessions = false;
+// Newest first, like the solve list
+function sessionsOf(list) {
+  const out = [];
+  for (const s of list) {
+    const cur = out.at(-1);
+    if (cur && cur.start - s.created_at <= SESSION_GAP) { cur.solves.push(s); cur.start = s.created_at; }
+    else out.push({ solves: [s], start: s.created_at, end: s.created_at });
+  }
+  return out;
+}
+const fmtClock = (t) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+function sessionDay(t) {
+  const d = new Date(t), now = new Date(), y = new Date(); y.setDate(y.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) });
+}
+const sessionLabel = (ss) => `${sessionDay(ss.start)} · ${fmtClock(ss.start)}${ss.end - ss.start >= 60e3 ? `–${fmtClock(ss.end)}` : ''}`;
+function bestRolling(n, list) {
+  let best = null;
+  for (let i = 0; i + n <= list.length; i++) { const a = avgOf(n, list.slice(i, i + n)); if (typeof a === 'number' && (best === null || a < best)) best = a; }
+  return best;
+}
+function sessionSummary(ss, m) {
+  const valid = ss.solves.map(eff).filter((v) => v !== null);
+  return {
+    n: ss.solves.length,
+    ok: valid.length,
+    best: valid.length ? Math.min(...valid) : null,
+    mean: valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null,
+    avg: m === 'bld' ? null : bestRolling(5, ss.solves),
+  };
+}
+function renderSessions() {
+  const root = $('sessions');
+  const all = sessionsOf(solves);
+  if (!all.length) { root.innerHTML = ''; return; }
+  const f = (v) => (v === null ? '-' : v === 'DNF' ? 'DNF' : fmt(v));
+  const [cur, ...past] = all, list = cur.solves, sum = sessionSummary(cur, mode);
+  const live = Date.now() - cur.end <= SESSION_GAP;
+  const tiles = mode === 'bld'
+    ? [['Solves', sum.n], ['Success', `${sum.ok}/${sum.n}`], ['Best', f(sum.best)], ['mo3', f(meanOf(3, list))], ['Mean', f(sum.mean)]]
+    : [['Solves', sum.n], ['Best', f(sum.best)], ['ao5', f(avgOf(5, list))], ['ao12', f(avgOf(12, list))], ['Mean', f(sum.mean)]];
+  const shown = showAllSessions ? past : past.slice(0, 5);
+  const rows = shown.map((ss) => {
+    const x = sessionSummary(ss, mode);
+    const last = mode === 'bld' ? `${x.ok}/${x.n}` : f(x.avg);
+    return `<tr><td>${sessionLabel(ss)}</td><td>${x.n}</td><td>${f(x.best)}</td><td>${f(x.mean)}</td><td>${last}</td></tr>`;
+  }).join('');
+  root.innerHTML = `<div class="card sess-card">
+    <div class="card-head"><h2>${live ? 'Current session' : 'Last session'}</h2><span class="sess-when">${sessionLabel(cur)}</span></div>
+    <div class="sess-cur">${tiles.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+    ${past.length ? `<div class="sess-table"><table><thead><tr><th>Earlier sessions</th><th>Solves</th><th>Best</th><th>Mean</th><th>${mode === 'bld' ? 'Success' : 'Best ao5'}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${past.length > 5 ? `<button type="button" class="sess-more">${showAllSessions ? 'Show fewer' : `Show all ${past.length}`}</button>` : ''}` : ''}
+    <p class="sess-note">A new session starts automatically after an hour without solves.</p>
+  </div>`;
+}
+$('sessions').onclick = (e) => { if (e.target.closest('.sess-more')) { showAllSessions = !showAllSessions; renderSessions(); } };
+
+// ---------- alg trainer ----------
+const caseById = (set, id) => ALGS[set].find((c) => c[0] === id);
+const diagrams = new Map();
+function caseSvg(set, id, size) {
+  const k = `${set}:${id}:${size}`;
+  if (!diagrams.has(k)) {
+    const alg = caseById(set, id)[2];
+    diagrams.set(k, Cube.llSvg(Cube.apply(Cube.solved(), Cube.fmtMoves(Cube.invert(Cube.faceMoves(alg)))), set === 'oll', size));
+  }
+  return diagrams.get(k);
+}
+function loadSel(set) {
+  try { const v = JSON.parse(localStorage.getItem('train-sel-' + set)); if (Array.isArray(v)) return new Set(v); } catch { /* fall through */ }
+  return new Set(ALGS[set].map((c) => c[0]));
+}
+const trainSel = { pll: loadSel('pll'), oll: loadSel('oll') };
+const saveSel = (set) => localStorage.setItem('train-sel-' + set, JSON.stringify([...trainSel[set]]));
+// Per case: attempts, best, mean of the last 5 successes, DNFs
+function caseStats(list) {
+  const by = new Map();
+  for (const s of list) if (s.case_id) (by.get(s.case_id) || by.set(s.case_id, []).get(s.case_id)).push(s);
+  const out = new Map();
+  for (const [id, arr] of by) {
+    const ok = arr.map(eff).filter((v) => v !== null), recent = ok.slice(0, 5);
+    out.set(id, { n: arr.length, dnf: arr.length - ok.length, best: ok.length ? Math.min(...ok) : null, avg: recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : null });
+  }
+  return out;
+}
+// Weighted pick: untried and slow cases come up more, never the same case twice in a row
+function pickCase() {
+  const sel = ALGS[mode].filter((c) => trainSel[mode].has(c[0]));
+  const cases = sel.length ? sel : ALGS[mode];
+  const st = caseStats(solves), avgs = [...st.values()].map((x) => x.avg).filter((v) => v !== null);
+  const mean = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 1;
+  const w = cases.map(([id]) => {
+    if (id === trainCase && cases.length > 1) return 0;
+    const x = st.get(id);
+    return !x || x.avg === null ? 2.5 : Math.min(4, (x.avg / mean) ** 2) + (x.dnf ? 0.5 : 0);
+  });
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  return cases.find((_, i) => (r -= w[i]) <= 0) || cases.at(-1);
+}
+function renderCaseGrid() {
+  const sel = trainSel[mode], total = ALGS[mode].length;
+  $('train-pick').textContent = `Choose cases (${sel.size || total}/${total})`;
+  $('train-count').textContent = sel.size ? `${sel.size} of ${total} selected` : `None selected: drilling all ${total}`;
+  if ($('train-cases').hidden) return;
+  $('train-grid').innerHTML = ALGS[mode].map(([id, name]) => `<button type="button" class="case" data-case="${id}" aria-pressed="${sel.has(id)}">${caseSvg(mode, id, 64)}<span>${name}</span></button>`).join('');
+}
+function renderTrainer() {
+  segSelect('train-set', 'set', mode);
+  renderCaseGrid();
+  const st = caseStats(solves), f = (v) => (v === null ? 'DNF' : fmt(v));
+  const rows = ALGS[mode].filter(([id]) => st.has(id)).map(([id, name, alg]) => ({ id, name, alg, ...st.get(id) }))
+    .sort((a, b) => (b.avg ?? 1e12) - (a.avg ?? 1e12));
+  const valid = solves.map(eff).filter((v) => v !== null);
+  const mean = valid.length ? fmt(valid.reduce((a, b) => a + b, 0) / valid.length) : '-';
+  const root = $('train-stats');
+  root.innerHTML = `<div class="stats three">
+      <div class="stat"><span>Attempts</span><b>${solves.length}</b></div>
+      <div class="stat"><span>Cases seen</span><b>${st.size}/${ALGS[mode].length}</b></div>
+      <div class="stat"><span>Mean</span><b>${mean}</b></div>
+    </div>
+    ${rows.length ? `<div class="card"><div class="card-head"><h2>Your cases, slowest first</h2><span class="sess-when">mean of last 5</span></div>
+    <ul class="case-rows">${rows.map((r) => `<li>${caseSvg(mode, r.id, 44)}<div class="cr-name"><b>${r.name}</b><code>${esc(r.alg)}</code></div>
+      <span class="cr-n">${r.n}×${r.dnf ? ` · ${r.dnf} DNF` : ''}</span><span class="cr-best">best ${r.best === null ? '-' : fmt(r.best)}</span><b class="cr-avg">${f(r.avg)}</b></li>`).join('')}</ul></div>` : ''}`;
+}
+function showTrainLast(s) {
+  const c = caseById(s.mode, s.case_id);
+  if (!c) return;
+  const el = $('train-last');
+  el.hidden = false;
+  el.innerHTML = `<div class="card tl">${caseSvg(s.mode, c[0], 76)}<div class="tl-body"><span>That was</span><b>${c[1]}</b><div class="alg">${chips(c[2])}</div></div><b class="tl-time">${fmtSolve(s)}</b></div>`;
+}
+$('train-set').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.set === mode) return;
+  trainSet = b.dataset.set;
+  localStorage.setItem('train-set', trainSet);
+  setMode(trainSet);
+};
+$('train-pick').onclick = () => {
+  const open = $('train-cases').hidden;
+  $('train-cases').hidden = !open;
+  $('train-pick').setAttribute('aria-expanded', String(open));
+  renderCaseGrid();
+};
+$('train-grid').onclick = (e) => {
+  const b = e.target.closest('[data-case]');
+  if (!b) return;
+  const sel = trainSel[mode], id = b.dataset.case;
+  if (sel.has(id)) sel.delete(id); else sel.add(id);
+  saveSel(mode);
+  renderCaseGrid();
+};
+const setSel = (ids) => { trainSel[mode] = new Set(ids); saveSel(mode); renderCaseGrid(); newScramble(); };
+$('train-all').onclick = () => setSel(ALGS[mode].map((c) => c[0]));
+$('train-none').onclick = () => setSel([]);
+$('train-slow').onclick = () => {
+  const st = caseStats(solves);
+  setSel(ALGS[mode].map((c) => c[0]).sort((a, b) => (st.get(b)?.avg ?? 1e12) - (st.get(a)?.avg ?? 1e12)).slice(0, 5));
+};
+
 // ---------- API ----------
 async function api(method, url, body) {
   const res = await fetch(url, {
@@ -355,9 +534,19 @@ async function api(method, url, body) {
   if (!res.ok) throw Object.assign(new Error((await res.json().catch(() => ({}))).error || res.statusText), { status: res.status });
   return res.json();
 }
+const cacheKey = (m) => `solves:${$('who').textContent}:${m}`;
 async function load() {
   const m = mode;
-  const list = await api('GET', `/api/solves?mode=${m}`);
+  let list;
+  try {
+    list = await api('GET', `/api/solves?mode=${m}`);
+    try { localStorage.setItem(cacheKey(m), JSON.stringify(list.slice(0, 2000))); } catch { /* storage full */ }
+  } catch (e) {
+    // Offline or mid-deploy: show the last copy we saw
+    if (e.status === 401) throw e;
+    try { list = JSON.parse(localStorage.getItem(cacheKey(m))); } catch { list = null; }
+    if (!list) throw e;
+  }
   if (m !== mode) return; // tab switched while loading
   // Keep queued solves that haven't reached the server yet on top
   const saved = new Set(list.map((s) => s.client_id).filter(Boolean));
@@ -373,18 +562,34 @@ function solveItem(s, n, isPb) {
   const cls = s.penalty === 'DNF' ? 'dnf' : s.penalty === '+2' ? 'p2' : '';
   const sub = [];
   if (s.memo_ms != null) sub.push(`memo ${fmt(s.memo_ms)} · exec ${fmt(s.time_ms - s.memo_ms)}`);
-  if (s.edges || s.corners) sub.push(`<span class="e">${esc(s.edges || '–')}</span> | <span class="c">${esc(s.corners || '–')}</span>`);
+  if (s.edges || s.corners) {
+    sub.push(`<span class="e">${esc(s.edges || '–')}</span> | <span class="c">${esc(s.corners || '–')}</span>`);
+    const chk = memoCheck(s);
+    if (chk) sub.push(chk.ok ? '<span class="memo-ok">memo ✓</span>' : `<span class="memo-bad">memo ✗ · should be ${chk.e} | ${chk.c}</span>`);
+  }
+  if (s.case_id) { const c = caseById(s.mode, s.case_id); if (c) sub.push(`<span class="case-name">${c[1]}</span>`); }
   li.innerHTML = `<span class="n">${n}.</span><div class="tm"><span class="t ${cls}">${fmtSolve(s)}</span>${sub.length ? `<span class="sub">${sub.join(' · ')}</span>` : ''}</div>`;
   return li;
 }
 function render() {
-  renderStats();
-  renderInsights($('insights'), solves, mode);
+  if (isTrain()) renderTrainer();
+  else {
+    renderStats();
+    renderInsights($('insights'), solves, mode);
+    renderSessions();
+  }
   const ul = $('list');
   if (!solves.length) { ul.innerHTML = '<li class="empty">No solves yet</li>'; return; }
   ul.innerHTML = '';
-  const pb = bestSolve();
+  const pb = isTrain() ? null : bestSolve();
+  // Session dividers above the newest solve of each session
+  const starts = new Map(isTrain() ? [] : sessionsOf(solves).map((ss) => [ss.solves[0], ss]));
   solves.forEach((s, i) => {
+    const ss = starts.get(s);
+    if (ss) {
+      const x = sessionSummary(ss, mode);
+      ul.insertAdjacentHTML('beforeend', `<li class="sess-div"><span>${sessionLabel(ss)}</span><span>${x.n} solve${x.n === 1 ? '' : 's'}${x.mean === null ? '' : ` · mean ${fmt(x.mean)}`}</span></li>`);
+    }
     const li = solveItem(s, solves.length - i, s === pb);
     if (s.pending) {
       li.classList.add('pending');
@@ -420,7 +625,7 @@ async function removeSolve(id) {
   catch (e) { alert(e.message); }
 }
 $('clear').onclick = async () => {
-  const label = mode === 'bld' ? 'blindfolded' : '3×3';
+  const label = MODE_LABEL[mode];
   if (!solves.length || !confirm(`Delete ALL ${label} solves? This cannot be undone.`)) return;
   try {
     await api('DELETE', `/api/solves?mode=${mode}`);
@@ -475,6 +680,39 @@ for (const i of Object.values(memoInputs)) {
   i.addEventListener('input', () => formatMemo(i));
 }
 $('memo-clear').onclick = clearMemo;
+
+// Memo checking against the scramble (Old Pochmann, Speffz, white top green front)
+const pairUp = (t) => (t.match(/.{1,2}/g) || []).join(' ') || '–';
+const memoCache = new Map();
+function memoCheck(s) {
+  if (s.mode !== 'bld' || !s.scramble) return null;
+  const k = `${s.scramble}|${s.edges}|${s.corners}`;
+  if (!memoCache.has(k)) {
+    try {
+      const e = letters(s.edges || ''), c = letters(s.corners || '');
+      const ok = Cube.memoSolves(s.scramble, 'e', e) && Cube.memoSolves(s.scramble, 'c', c);
+      memoCache.set(k, { ok, e: pairUp(Cube.memo(s.scramble, 'e')), c: pairUp(Cube.memo(s.scramble, 'c')) });
+    } catch { memoCache.set(k, null); } // unparseable scramble
+  }
+  return memoCache.get(k);
+}
+function showMemoResult(html) {
+  const el = $('memo-result');
+  el.innerHTML = html;
+  el.hidden = false;
+}
+$('memo-verify').onclick = () => {
+  const e = letters(memoInputs.edges.value), c = letters(memoInputs.corners.value);
+  if (!e && !c) return showMemoResult('Type your memo first.');
+  const okE = Cube.memoSolves(scramble, 'e', e), okC = Cube.memoSolves(scramble, 'c', c);
+  const tag = (ok, label) => `<span class="${ok ? 'memo-ok' : 'memo-bad'}">${ok ? '✓' : '✗'} ${label}</span>`;
+  showMemoResult(`${tag(okE, 'Edges')} ${tag(okC, 'Corners')}${okE && okC ? '<small>Your memo solves this scramble.</small>' : '<small>Wrong pieces or order. Try again, or show the solution.</small>'}`);
+};
+$('memo-reveal').onclick = () => {
+  const e = Cube.memo(scramble, 'e'), c = Cube.memo(scramble, 'c');
+  showMemoResult(`<span class="memo-sol e">Edges <b>${pairUp(e)}</b></span><span class="memo-sol c">Corners <b>${pairUp(c)}</b></span>
+    <small>${e.length % 2 ? 'Parity needed. ' : ''}Buffers UR and ULB; cycle breaks go to the lowest free letter, so yours may differ and still be right.</small>`);
+};
 $('parity-alg').innerHTML = chips(PARITY_ALG);
 $('edge-alg').innerHTML = chips(EDGE_ALG);
 $('corner-alg').innerHTML = chips(CORNER_ALG);
@@ -544,6 +782,9 @@ async function stopRun() {
   setState('stopped');
   timerEl.textContent = fmt(ms);
   const body = { time_ms: ms, scramble, penalty: inspectPenalty, mode };
+  if (isTrain()) body.case_id = trainCase;
+  const ch = mode === '333' ? challenge : null;
+  if (ch) { challenge = null; showBanner(); }
   if (mode === 'bld') {
     body.memo_ms = memoAt;
     body.edges = memoInputs.edges.value;
@@ -553,7 +794,7 @@ async function stopRun() {
   newScramble();
   // Queue first so the solve survives a failed request, a deploy or a reload
   const p = { ...body, client_id: newClientId(), created_at: Date.now(), user: $('who').textContent, pending: true };
-  const prevBest = bestSolve();
+  const prevBest = isTrain() ? null : bestSolve();
   isPb = eff(p) !== null && prevBest && eff(p) < eff(prevBest);
   savePending([...loadPending(), p]);
   solves.unshift(p);
@@ -563,6 +804,8 @@ async function stopRun() {
   else if (p.penalty === '+2') timerEl.textContent = fmt(ms + 2000) + '+';
   setState('idle');
   if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
+  if (isTrain()) showTrainLast(p);
+  if (ch) queueChallenge(ch.code, { time_ms: ms, penalty: p.penalty }, true);
   flushPending();
 }
 
@@ -574,6 +817,7 @@ const savePending = (list) => localStorage.setItem(PENDING_KEY, JSON.stringify(l
 const pendingFor = (m) => loadPending().filter((p) => p.user === $('who').textContent && p.mode === m).reverse();
 let flushing = false, retryT = 0, retryDelay = 2000;
 async function flushPending() {
+  flushChallenges();
   if (flushing || !authed()) return;
   flushing = true;
   clearTimeout(retryT);
@@ -605,7 +849,35 @@ async function flushPending() {
     retryDelay = 2000;
   } finally { flushing = false; }
 }
-window.addEventListener('online', () => { retryDelay = 2000; flushPending(); });
+window.addEventListener('online', () => { retryDelay = 2000; flushPending(); refreshDaily(); });
+
+// Challenge results queue the same way, so a daily attempt survives going offline
+const CH_KEY = 'pending-challenges';
+let chOpenAfter = null, chFlushing = false;
+function loadChQueue() { try { return JSON.parse(localStorage.getItem(CH_KEY)) || []; } catch { return []; } }
+const saveChQueue = (list) => localStorage.setItem(CH_KEY, JSON.stringify(list));
+function queueChallenge(code, body, open) {
+  saveChQueue([...loadChQueue(), { code, ...body, user: $('who').textContent }]);
+  if (open) chOpenAfter = code;
+}
+async function flushChallenges() {
+  if (chFlushing || !authed()) return;
+  chFlushing = true;
+  const me = $('who').textContent;
+  try {
+    for (const x of loadChQueue().filter((c) => c.user === me)) {
+      let view;
+      try { view = await api('POST', `/api/challenges/${x.code}/result`, { time_ms: x.time_ms, penalty: x.penalty }); }
+      catch (e) {
+        if (!(e.status >= 400 && e.status < 500 && ![401, 408, 429].includes(e.status))) return; // retried with the solve queue
+        alert(`Could not submit to the ${x.code.startsWith('daily-') ? 'daily scramble' : 'race'}: ${e.message}`);
+      }
+      saveChQueue(loadChQueue().filter((c) => !(c.code === x.code && c.user === me)));
+      if (view?.kind === 'daily') updateDaily(view);
+      if (view && chOpenAfter === x.code) { chOpenAfter = null; openChallenge(view); }
+    }
+  } finally { chFlushing = false; }
+}
 
 // Press: begin hold, split memo (BLD), or stop a running timer.
 function press() {
@@ -670,21 +942,25 @@ document.addEventListener('touchstart', (e) => { if (state === 'running') { e.pr
 function setMode(m) {
   if (state !== 'idle' && state !== 'stopped') return;
   if (m === 'board') { showBoard(); return; }
+  if (m === 'train') m = trainSet;
+  if (m !== '333' && challenge) { challenge = null; showBanner(); }
   mode = m;
+  const tab = isTrain() ? 'train' : m;
   document.body.dataset.mode = m;
-  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === m)));
-  history.replaceState(null, '', m === 'bld' ? '#bld' : location.pathname);
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === tab)));
+  history.replaceState(null, '', { bld: '#bld', train: '#train' }[tab] || location.pathname);
   timerEl.textContent = '0.00';
   setSplit('');
+  $('train-last').hidden = true;
   solves = [];
   render();
   newScramble();
   if (authed()) load().catch((e) => { $('list').innerHTML = `<li class="empty">Failed to load: ${esc(e.message)}</li>`; });
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board' })[location.hash] || '333';
+const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train' })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
-  if (applyInviteLink()) return;
+  if (applyInviteLink() || applyRaceLink()) return;
   setMode(modeFromHash());
 });
 
@@ -698,23 +974,33 @@ function setAuthMode(m) {
   authMode = m;
   $('auth').dataset.mode = m;
   document.querySelectorAll('[data-auth-mode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.authMode === m)));
-  $('auth-submit').textContent = m === 'login' ? 'Log in' : 'Create account';
+  $('auth-submit').textContent = { login: 'Log in', register: 'Create account', reset: 'Reset password' }[m];
   $('auth-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('auth-pass-label').textContent = m === 'reset' ? 'New password' : 'Password';
+  $('auth-forgot').textContent = m === 'reset' ? 'Back to log in' : 'Forgot password?';
   $('auth-error').textContent = '';
 }
+$('auth-forgot').onclick = () => setAuthMode(authMode === 'reset' ? 'login' : 'reset');
+let meUser = null;
 function showAuth() {
   document.body.dataset.auth = 'out';
+  localStorage.removeItem('me');
   solves = [];
   setTimeout(() => $('auth-user').focus(), 50);
 }
 function signedIn(user) {
+  meUser = user;
+  localStorage.setItem('me', JSON.stringify(user));
   document.body.dataset.auth = 'in';
   $('who').textContent = user.username;
   $('user-btn').textContent = user.username[0].toUpperCase();
   $('auth-pass').value = '';
   $('auth-invite').value = '';
+  $('auth-code').value = '';
   setMode(modeFromHash() === 'board' ? 'board' : mode);
   flushPending();
+  refreshDaily();
+  applyRaceLink();
 }
 document.querySelectorAll('[data-auth-mode]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.authMode); });
 $('auth-form').onsubmit = async (e) => {
@@ -725,8 +1011,12 @@ $('auth-form').onsubmit = async (e) => {
   try {
     const body = { username: $('auth-user').value.trim(), password: $('auth-pass').value };
     if (authMode === 'register') body.invite = $('auth-invite').value.trim();
+    if (authMode === 'reset') body.code = $('auth-code').value.trim();
     const { user } = await api('POST', `/api/${authMode}`, body);
+    const wasReset = authMode === 'reset';
+    setAuthMode('login');
     signedIn(user);
+    if (wasReset) openAccount('Password reset. That recovery code is used up, so create a new one.');
   } catch (err) { $('auth-error').textContent = err.message; }
   btn.disabled = false;
 };
@@ -740,6 +1030,7 @@ $('logout').onclick = async () => {
   toggleMenu(false);
   await api('POST', '/api/logout').catch(() => {});
   clearMemo(); // memo notes are per device; don't leave them for the next person
+  for (const k of Object.keys(localStorage)) if (k.startsWith('solves:')) localStorage.removeItem(k);
   showAuth();
 };
 
@@ -806,6 +1097,188 @@ function applyInviteLink() {
   if (authed()) return true; // already has an account
   setAuthMode('register');
   $('auth-invite').value = code;
+  return true;
+}
+
+// ---------- password & recovery ----------
+function openAccount(note) {
+  toggleMenu(false);
+  for (const id of ['pw-current', 'pw-new', 'rc-current']) $(id).value = '';
+  $('pw-msg').textContent = '';
+  $('pw-msg').className = 'auth-error';
+  $('rc-msg').textContent = note || '';
+  $('rc-msg').className = note ? 'auth-ok' : 'auth-error';
+  $('rc-code').hidden = true;
+  $('rc-status').textContent = meUser?.hasRecovery
+    ? 'You have a recovery code. Making a new one replaces it.'
+    : 'With a recovery code you can reset a forgotten password yourself. Store it somewhere safe; it works once.';
+  $('rc-submit').textContent = meUser?.hasRecovery ? 'Replace recovery code' : 'Create recovery code';
+  $('account-dialog').showModal();
+}
+$('account-open').onclick = () => openAccount();
+$('account-close').onclick = () => $('account-dialog').close();
+$('account-dialog').addEventListener('click', (e) => { if (e.target === $('account-dialog')) $('account-dialog').close(); });
+$('pw-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = $('pw-msg');
+  try {
+    await api('POST', '/api/password', { current: $('pw-current').value, password: $('pw-new').value });
+    $('pw-current').value = $('pw-new').value = '';
+    msg.className = 'auth-ok';
+    msg.textContent = 'Password changed. Other devices are logged out.';
+  } catch (err) { msg.className = 'auth-error'; msg.textContent = err.message; }
+};
+$('rc-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const msg = $('rc-msg');
+  msg.textContent = '';
+  try {
+    const { code } = await api('POST', '/api/recovery', { current: $('rc-current').value });
+    $('rc-current').value = '';
+    meUser = { ...meUser, hasRecovery: true };
+    localStorage.setItem('me', JSON.stringify(meUser));
+    const box = $('rc-code');
+    box.innerHTML = `<code>${esc(code)}</code><button type="button">Copy</button>`;
+    box.hidden = false;
+    box.querySelector('button').onclick = (ev) => navigator.clipboard?.writeText(code).then(() => { ev.target.textContent = 'Copied!'; }).catch(() => {});
+    msg.className = 'auth-ok';
+    msg.textContent = 'Save this now. It is only shown once.';
+    $('rc-submit').textContent = 'Replace recovery code';
+  } catch (err) { msg.className = 'auth-error'; msg.textContent = err.message; }
+};
+
+// ---------- daily scramble & races ----------
+let chView = null, chPoll = 0;
+const raceUrl = (code) => `${location.origin}/#race=${code}`;
+const resultMs = (r) => (r.penalty === 'DNF' ? null : r.time_ms + (r.penalty === '+2' ? 2000 : 0));
+// Finished first (fastest on top, DNFs after), then people still solving
+function rankResults(results) {
+  return results.slice().sort((a, b) => (b.done - a.done) || ((resultMs(a) ?? 1e12) - (resultMs(b) ?? 1e12)));
+}
+function showBanner() {
+  $('ch-banner').hidden = !challenge;
+  $('challenges').hidden = !!challenge;
+  if (challenge) $('ch-banner-text').innerHTML = `<b>${challenge.kind === 'daily' ? 'Daily scramble' : 'Race'}</b> · one attempt, it counts when you stop the timer`;
+}
+function startChallenge(v) {
+  $('challenge-dialog').close();
+  challenge = { kind: v.kind, code: v.code, scramble: v.scramble };
+  if (mode !== '333') setMode('333');
+  newScramble();
+  showBanner();
+  timerEl.textContent = '0.00';
+  timerEl.focus();
+}
+$('ch-cancel').onclick = () => { challenge = null; showBanner(); newScramble(); };
+
+function updateDaily(v) {
+  const done = v.results.filter((r) => r.done), mine = v.results.find((r) => r.me && r.done);
+  const rank = mine ? rankResults(v.results).indexOf(v.results.find((r) => r.me)) + 1 : 0;
+  $('daily-sub').textContent = mine
+    ? `You: ${fmtSolve(mine)} · #${rank} of ${done.length}`
+    : done.length ? `${done.length} played today · your turn` : 'Same scramble for everyone today';
+  $('daily-btn').classList.toggle('done', !!mine);
+}
+async function refreshDaily() {
+  try { updateDaily(await api('GET', '/api/daily')); } catch { /* offline */ }
+}
+
+function renderChallenge() {
+  const v = chView, me = $('who').textContent;
+  const daily = v.kind === 'daily', allDone = v.results.length > 1 && v.results.every((r) => r.done);
+  $('ch-title').textContent = daily ? 'Daily scramble' : `Race${v.created_by ? ` by ${v.created_by}` : ''}`;
+  $('ch-sub').textContent = daily
+    ? `${new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · one attempt each. Times show once you've done yours.`
+    : v.done ? (allDone ? 'Everyone finished.' : 'Waiting for the others. This updates by itself.') : 'Solve it, then see how everyone did.';
+  $('ch-share').hidden = daily;
+  $('ch-link').textContent = raceUrl(v.code);
+  $('ch-start').hidden = v.done;
+  $('ch-start').textContent = daily ? 'Start: one attempt' : 'Start solve';
+  const ranked = rankResults(v.results);
+  const winner = !daily && allDone && resultMs(ranked[0]) !== null ? ranked[0] : null;
+  $('ch-results').innerHTML = ranked.length ? ranked.map((r, i) => {
+    const val = r.time_ms !== null ? fmtSolve(r) : r.done ? 'finished' : 'solving…';
+    const pen = r.me && r.done ? ['+2', 'DNF'].map((p) => `<button type="button" data-pen="${p}" class="${r.penalty === p ? 'on' : ''}">${p}</button>`).join('') : '';
+    return `<li class="${r.me ? 'me' : ''}${r === winner ? ' win' : ''}">
+      <span class="rank">${r.done && r.time_ms !== null ? i + 1 : '·'}</span>
+      <span class="ch-who"><span class="avatar static">${esc(r.username[0].toUpperCase())}</span>${esc(r.username)}${r.username === me ? ' (you)' : ''}${r === winner ? ' 🏆' : ''}</span>
+      ${pen}<b class="val ${r.time_ms === null ? 'wait' : ''}">${val}</b></li>`;
+  }).join('') : '<li class="empty">Nobody has done this one yet</li>';
+}
+async function openChallenge(v) {
+  chView = v;
+  $('ch-error').textContent = '';
+  renderChallenge();
+  if (!$('challenge-dialog').open) $('challenge-dialog').showModal();
+  clearInterval(chPoll);
+  chPoll = setInterval(async () => {
+    if (!$('challenge-dialog').open) { clearInterval(chPoll); return; }
+    try { chView = await api('GET', `/api/challenges/${chView.code}`); renderChallenge(); } catch { /* keep last view */ }
+  }, 4000);
+}
+$('ch-close').onclick = () => $('challenge-dialog').close();
+$('challenge-dialog').addEventListener('click', (e) => { if (e.target === $('challenge-dialog')) $('challenge-dialog').close(); });
+$('challenge-dialog').addEventListener('close', () => clearInterval(chPoll));
+$('ch-start').onclick = () => startChallenge(chView);
+$('ch-copy').onclick = async () => {
+  const url = raceUrl(chView.code);
+  try {
+    if (navigator.share) await navigator.share({ title: 'Cube Timer race', text: 'Race me on this scramble', url });
+    else { await navigator.clipboard.writeText(url); $('ch-copy').textContent = 'Copied!'; setTimeout(() => { $('ch-copy').textContent = 'Copy'; }, 1500); }
+  } catch { /* share sheet dismissed */ }
+};
+$('ch-results').onclick = async (e) => {
+  const b = e.target.closest('[data-pen]');
+  if (!b) return;
+  const mine = chView.results.find((r) => r.me);
+  try {
+    chView = await api('PATCH', `/api/challenges/${chView.code}/result`, { penalty: mine.penalty === b.dataset.pen ? null : b.dataset.pen });
+    renderChallenge();
+    if (chView.kind === 'daily') updateDaily(chView);
+  } catch (err) { $('ch-error').textContent = err.message; }
+};
+
+$('daily-btn').onclick = async () => {
+  try {
+    const v = await api('GET', '/api/daily');
+    updateDaily(v);
+    openChallenge(v);
+  } catch (e) { alert(e.message); }
+};
+async function loadRaces() {
+  const ul = $('race-list');
+  try {
+    const list = await api('GET', '/api/races');
+    if (!list.length) { ul.innerHTML = '<li class="empty">No races yet. Start one and send the link to a friend.</li>'; return; }
+    ul.innerHTML = list.map((r) => {
+      const status = !r.done ? ['Your turn', 'turn'] : r.finished < r.players ? ['Waiting', 'wait'] : ['Done', 'done'];
+      return `<li><button type="button" class="race-row" data-code="${esc(r.code)}">
+        <span class="race-st ${status[1]}">${status[0]}</span>
+        <span class="race-info"><b>${r.created_by === $('who').textContent ? 'Your race' : `${esc(r.created_by || '?')}'s race`}</b><small>${fmtDate(r.created_at)} · ${r.finished}/${r.players} finished</small></span></button></li>`;
+    }).join('');
+  } catch (e) { $('race-error').textContent = e.message; }
+}
+$('race-btn').onclick = () => { $('race-error').textContent = ''; $('race-dialog').showModal(); loadRaces(); };
+$('race-close').onclick = () => $('race-dialog').close();
+$('race-dialog').addEventListener('click', (e) => { if (e.target === $('race-dialog')) $('race-dialog').close(); });
+$('race-create').onclick = async () => {
+  try { const v = await api('POST', '/api/races'); $('race-dialog').close(); openChallenge(v); }
+  catch (e) { $('race-error').textContent = e.message; }
+};
+$('race-list').onclick = async (e) => {
+  const b = e.target.closest('[data-code]');
+  if (!b) return;
+  try { const v = await api('GET', `/api/challenges/${b.dataset.code}`); $('race-dialog').close(); openChallenge(v); }
+  catch (err) { $('race-error').textContent = err.message; }
+};
+// Race links (#race=CODE) join the race, after logging in if needed
+function applyRaceLink() {
+  const code = (location.hash.match(/^#race=([A-Za-z0-9_-]{6,32})$/) || [])[1] || sessionStorage.getItem('race-link');
+  if (!code) return false;
+  if (location.hash.startsWith('#race=')) history.replaceState(null, '', location.pathname);
+  if (!authed()) { sessionStorage.setItem('race-link', code); return true; }
+  sessionStorage.removeItem('race-link');
+  api('POST', `/api/challenges/${code}/join`).then(openChallenge).catch((e) => alert(e.message));
   return true;
 }
 
@@ -910,4 +1383,13 @@ $('profile-dialog').addEventListener('click', (e) => { if (e.target === $('profi
 renderMemo();
 setAuthMode('login');
 applyInviteLink();
-api('GET', '/api/me').then(({ user }) => signedIn(user)).catch(showAuth);
+applyRaceLink();
+api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
+  // Offline or server restarting: keep working with the last known account; solves queue until it's back
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem('me')); } catch { /* none */ }
+  if (cached && e.status !== 401) signedIn(cached); else showAuth();
+});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}

@@ -10,6 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body data-state="idle" data-mode="333" data-auth="pending">
   <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -22,6 +26,7 @@
     <nav class="tabs" role="tablist">
       <button role="tab" data-mode="333">3×3</button>
       <button role="tab" data-mode="bld">Blindfolded</button>
+      <button role="tab" data-mode="train">Trainer</button>
       <button role="tab" data-mode="board">Leaderboard</button>
     </nav>
     <div class="right">
@@ -35,6 +40,7 @@
         <div id="user-menu" class="user-menu" role="menu">
           <div class="who">Signed in as <b id="who"></b></div>
           <button id="invite-open" role="menuitem" class="menu-accent">Invite friends</button>
+          <button id="account-open" role="menuitem">Password &amp; recovery</button>
           <button id="logout" role="menuitem">Log out</button>
         </div>
       </div>
@@ -51,10 +57,13 @@
         <button type="button" role="tab" data-auth-mode="register" aria-selected="false">Sign up</button>
       </div>
       <label class="field"><span>Username</span><input id="auth-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
-      <label class="field"><span>Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <label class="field reset-only"><span>Recovery code</span><input id="auth-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX"></label>
+      <label class="field"><span id="auth-pass-label">Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password" required></label>
       <label class="field reg-only"><span>Invite code</span><input id="auth-invite" name="invite" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
       <p id="auth-error" class="auth-error" role="alert"></p>
       <button id="auth-submit" class="primary" type="submit">Log in</button>
+      <button id="auth-forgot" class="link" type="button">Forgot password?</button>
+      <p class="reset-only auth-note">Lost your recovery code too? Ask the admin to reset your password.</p>
     </form>
   </section>
 
@@ -67,6 +76,52 @@
     <button id="invite-create" class="primary">Create invite link</button>
     <p id="invite-error" class="auth-error" role="alert"></p>
     <ul id="invite-list" class="invite-list"></ul>
+  </dialog>
+
+  <dialog id="account-dialog" class="dialog">
+    <div class="dialog-head">
+      <h2>Password &amp; recovery</h2>
+      <button id="account-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <form id="pw-form" class="acct-form" novalidate>
+      <h3>Change password</h3>
+      <label class="field"><span>Current password</span><input id="pw-current" type="password" autocomplete="current-password" required></label>
+      <label class="field"><span>New password</span><input id="pw-new" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p id="pw-msg" class="auth-error" role="alert"></p>
+      <button class="primary" type="submit">Change password</button>
+      <p class="dialog-sub">Logs you out on your other devices.</p>
+    </form>
+    <form id="rc-form" class="acct-form" novalidate>
+      <h3>Recovery code</h3>
+      <p class="dialog-sub" id="rc-status"></p>
+      <label class="field"><span>Current password</span><input id="rc-current" type="password" autocomplete="current-password" required></label>
+      <p id="rc-msg" class="auth-error" role="alert"></p>
+      <div id="rc-code" class="rc-code" hidden></div>
+      <button class="primary alt" type="submit" id="rc-submit">Create recovery code</button>
+    </form>
+  </dialog>
+
+  <dialog id="race-dialog" class="dialog">
+    <div class="dialog-head">
+      <h2>Race a friend</h2>
+      <button id="race-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <p class="dialog-sub">Everyone gets the same scramble. You see the others' times once you've finished yours.</p>
+    <button id="race-create" class="primary">New race</button>
+    <p id="race-error" class="auth-error" role="alert"></p>
+    <ul id="race-list" class="race-list"></ul>
+  </dialog>
+
+  <dialog id="challenge-dialog" class="dialog">
+    <div class="dialog-head">
+      <h2 id="ch-title"></h2>
+      <button id="ch-close" class="icon" aria-label="Close">✕</button>
+    </div>
+    <p class="dialog-sub" id="ch-sub"></p>
+    <div id="ch-share" class="ch-share" hidden><code id="ch-link"></code><button id="ch-copy" type="button">Copy</button></div>
+    <ol id="ch-results" class="ch-results"></ol>
+    <p id="ch-error" class="auth-error" role="alert"></p>
+    <button id="ch-start" class="primary">Start solve</button>
   </dialog>
 
   <dialog id="profile-dialog" class="dialog wide">
@@ -99,6 +154,27 @@
       <ol id="board-list" class="board-list"></ol>
     </section>
 
+    <div id="challenges" class="challenges chrome only-333">
+      <button id="daily-btn" type="button" class="ch-btn daily"><span class="ch-ico" aria-hidden="true">☀</span><span><b>Daily scramble</b><small id="daily-sub">Same scramble for everyone today</small></span></button>
+      <button id="race-btn" type="button" class="ch-btn race"><span class="ch-ico" aria-hidden="true">⚔</span><span><b>Race a friend</b><small>Same scramble, see who's faster</small></span></button>
+    </div>
+    <div id="ch-banner" class="ch-banner" hidden><span id="ch-banner-text"></span><button id="ch-cancel" type="button">Cancel</button></div>
+
+    <section id="trainer" class="trainer only-train chrome">
+      <div class="trainer-head">
+        <div class="seg small" id="train-set">
+          <button type="button" data-set="pll" aria-selected="true">PLL</button>
+          <button type="button" data-set="oll" aria-selected="false">OLL</button>
+        </div>
+        <button id="train-pick" type="button" aria-expanded="false">Choose cases</button>
+      </div>
+      <div id="train-cases" class="train-cases" hidden>
+        <div class="train-cases-head"><span id="train-count"></span><button id="train-all" type="button">All</button><button id="train-none" type="button">None</button><button id="train-slow" type="button">Slowest 5</button></div>
+        <div id="train-grid" class="train-grid"></div>
+      </div>
+      <p class="train-help">Apply the setup to a solved cube (white top, green front), then solve the case like a normal solve. Slower and new cases come up more often.</p>
+    </section>
+
     <div id="scramble" class="chrome" aria-live="polite"></div>
 
     <div class="stage">
@@ -124,6 +200,11 @@
           <span class="count" id="corners-n">0</span>
         </label>
         <p id="memo-check" class="memo-check"></p>
+        <div class="memo-actions">
+          <button id="memo-verify" type="button">Check my memo</button>
+          <button id="memo-reveal" type="button">Show solution</button>
+        </div>
+        <p id="memo-result" class="memo-result" hidden></p>
       </div>
       <div class="card parity" id="parity-card">
         <div class="card-head">
@@ -150,8 +231,12 @@
       </div>
     </section>
 
-    <section id="stats" class="stats chrome"></section>
-    <section id="insights" class="insights chrome"></section>
+    <section id="train-last" class="train-last only-train chrome" hidden></section>
+    <section id="train-stats" class="train-stats only-train chrome"></section>
+
+    <section id="stats" class="stats chrome no-train"></section>
+    <section id="insights" class="insights chrome no-train"></section>
+    <section id="sessions" class="sessions chrome no-train"></section>
 
     <section class="solves chrome">
       <div class="solves-head">
@@ -161,6 +246,8 @@
       <ul id="list"></ul>
     </section>
   </main>
+  <script src="cube.js"></script>
+  <script src="algs.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

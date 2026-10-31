@@ -97,9 +97,9 @@ function renderViewer() {
   const p = mvPos, mv = mvMoves[p - 1];
   let st;
   try { st = Cube.apply(mvStart, mvMoves.slice(0, p).join(' ')); } catch { closeViewer(); return; }
-  const face = mv && /^[UDLRFBudlrfb]/.test(mv) ? mv[0].toUpperCase() : null;
   const startText = mvSrc.dataset.start ? 'The case, before the first move' : 'Solved cube: white on top, green in front';
-  viewer.innerHTML = `${Cube.netSvg(st, 16, face)}
+  viewer.innerHTML = `<div class="mv-cubes">${Cube.cubeSvg(st, { size: 170, move: mv })}
+      <figure class="mv-back">${Cube.cubeSvg(st, { size: 86, back: true })}<figcaption>back</figcaption></figure></div>
     <div class="mv-side">
       <span class="mv-step">${p ? `Move ${p} of ${mvMoves.length}` : 'Start'}</span>
       <div class="mv-move">${p ? `<b>${esc(mv)}</b><span>${describeMove(mv)}</span>` : `<span>${startText}</span>`}</div>

@@ -172,21 +172,80 @@ const Cube = (() => {
     return `<svg class="ll" viewBox="0 0 ${w} ${w}" width="${size}" height="${size}" aria-hidden="true">${g}</svg>`;
   }
 
-  // Unfolded net (U on top, L F R B across, D below) in real WCA colours; hi outlines the face just turned
-  const NET = { U: [3, 0], L: [0, 3], F: [3, 3], R: [6, 3], B: [9, 3], D: [3, 6] };
+  // ---------- 3D view ----------
   const REAL = { U: 'var(--w)', D: 'var(--y)', F: 'var(--g)', B: 'var(--b)', R: 'var(--r)', L: 'var(--o)' };
-  function netSvg(state, cell = 16, hi = null) {
-    let g = '';
-    for (const f of FACES) {
-      const [fx, fy] = NET[f];
-      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-        g += `<rect x="${(fx + c) * cell + 1}" y="${(fy + r) * cell + 1}" width="${cell - 2}" height="${cell - 2}" rx="${cell * 0.18}" fill="${REAL[colorOf(state[at(f, r, c)])]}"/>`;
-      }
-      if (f === hi) g += `<rect class="net-hi" x="${fx * cell - 1}" y="${fy * cell - 1}" width="${3 * cell + 2}" height="${3 * cell + 2}" rx="${cell * 0.3}"/>`;
+  const add = (a, b) => a.map((v, i) => v + b[i]);
+  const mul = (a, k) => a.map((v) => v * k);
+  const r2 = (n) => Math.round(n * 1000) / 1000;
+  // Orthographic camera: azimuth from the front towards the right, elevation above the horizon
+  function camera(az, el) {
+    const a = (az * Math.PI) / 180, e = (el * Math.PI) / 180;
+    return {
+      d: [Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)],
+      r: [Math.cos(a), 0, -Math.sin(a)],
+      u: [-Math.sin(a) * Math.sin(e), Math.cos(e), -Math.cos(a) * Math.sin(e)],
+    };
+  }
+  const FRONT = camera(32, 28), BACK = camera(212, -28);
+  const project = (cam, p) => [dot(p, cam.r), -dot(p, cam.u)];
+  const tangents = (n) => [[1, 0, 0], [0, 1, 0], [0, 0, 1]].filter((t) => !dot(t, n));
+  const poly = (cam, pts) => pts.map((p) => project(cam, p).map(r2).join(',')).join(' ');
+
+  // Arrow along the turning layer's band on the visible faces, pointing the way the layer moves
+  function arrow(cam, tok) {
+    const { a, layers, k } = parseMove(tok);
+    const h = layers.length === 3 ? 0 : layers.reduce((x, y) => x + y, 0) / layers.length;
+    const u = a[0] ? [0, 1, 0] : [1, 0, 0], w = cross(a, u); // u × w = a, so increasing angle turns anticlockwise about a
+    const pts = [], vis = [];
+    for (let deg = 0; deg < 360; deg += 3) {
+      const t = (deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t), m = Math.max(Math.abs(c), Math.abs(s));
+      const normal = Math.abs(c) >= Math.abs(s) ? mul(u, Math.sign(c)) : mul(w, Math.sign(s));
+      pts.push(add(mul(a, h), mul(add(mul(u, c / m), mul(w, s / m)), 1.58)));
+      vis.push(dot(normal, cam.d) > 0.05);
     }
-    return `<svg class="net" viewBox="-3 -3 ${12 * cell + 6} ${9 * cell + 6}" width="${12 * cell + 6}" height="${9 * cell + 6}" role="img" aria-label="Cube net">${g}</svg>`;
+    // Rotate so the visible stretch doesn't wrap past 360°, then trim its ends
+    const first = vis.findIndex((v, i) => v && !vis[(i - 1 + vis.length) % vis.length]);
+    let arc = [];
+    for (let i = 0; i < pts.length; i++) { const j = (first + i) % pts.length; if (!vis[j]) break; arc.push(pts[j]); }
+    const trim = Math.floor(arc.length * 0.12);
+    arc = arc.slice(trim, arc.length - trim).map((p) => project(cam, p));
+    if (k === 1) arc.reverse(); // clockwise runs towards decreasing angle
+    const head = (tip, from) => {
+      const dx = tip[0] - from[0], dy = tip[1] - from[1], l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, s = 0.3;
+      return [[tip[0] + ux * s * 0.6, tip[1] + uy * s * 0.6], [tip[0] - ux * s * 0.7 - uy * s * 0.75, tip[1] - uy * s * 0.7 + ux * s * 0.75],
+        [tip[0] - ux * s * 0.7 + uy * s * 0.75, tip[1] - uy * s * 0.7 - ux * s * 0.75]].map((p) => p.map(r2).join(',')).join(' ');
+    };
+    const d = 'M' + arc.map((p) => p.map(r2).join(',')).join('L');
+    const heads = [head(arc.at(-1), arc.at(-4))];
+    if (k === 2) heads.push(head(arc[0], arc[3]));
+    return `<g class="cube-arrow"><path class="halo" d="${d}"/>${heads.map((hd) => `<polygon class="halo" points="${hd}"/>`).join('')}
+      <path d="${d}"/>${heads.map((hd) => `<polygon points="${hd}"/>`).join('')}</g>`;
   }
 
-  return { netSvg, solved, apply, faceMoves, fmtMoves, invert, simplify, setup, memo, memoSolves, llSvg, colorOf, at };
+  // Cube seen from the front-top-right (or from behind and below with back), optional move arrow
+  function cubeSvg(state, { size = 170, back = false, move = null } = {}) {
+    const cam = back ? BACK : FRONT;
+    let g = '';
+    for (const f of FACES) {
+      const n = NORMAL[f];
+      if (dot(n, cam.d) <= 0) continue;
+      const [t1, t2] = tangents(n), c = mul(n, 1.5);
+      g += `<polygon class="cube-face" points="${poly(cam, [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([x, y]) => add(c, add(mul(t1, 1.5 * x), mul(t2, 1.5 * y)))))}"/>`;
+      for (let r = 0; r < 3; r++) for (let col = 0; col < 3; col++) {
+        const i = at(f, r, col), m = add(STICKERS[i].p, mul(n, 0.5));
+        const pts = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([x, y]) => add(m, add(mul(t1, 0.42 * x), mul(t2, 0.42 * y))));
+        g += `<polygon class="cube-st" points="${poly(cam, pts)}" fill="${REAL[colorOf(state[i])]}"/>`;
+      }
+    }
+    if (move) { try { g += arrow(cam, move); } catch { /* unknown token: no arrow */ } }
+    // Fit the view to the projected cube (plus room for arrows)
+    const corners = [];
+    for (const x of [-1.5, 1.5]) for (const y of [-1.5, 1.5]) for (const z of [-1.5, 1.5]) corners.push(project(cam, [x, y, z]));
+    const pad = 0.35, xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
+    const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, w = Math.max(...xs) - x0 + pad, h = Math.max(...ys) - y0 + pad;
+    return `<svg class="cube3d" viewBox="${r2(x0)} ${r2(y0)} ${r2(w)} ${r2(h)}" width="${size}" height="${Math.round((size * h) / w)}" role="img" aria-label="${back ? 'Back of the cube' : 'Cube'}">${g}</svg>`;
+  }
+
+  return { cubeSvg, solved, apply, faceMoves, fmtMoves, invert, simplify, setup, memo, memoSolves, llSvg, colorOf, at };
 })();
 if (typeof module !== 'undefined') module.exports = Cube;

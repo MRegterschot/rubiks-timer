@@ -346,9 +346,18 @@ body[data-mode="board"] .tabs button[aria-selected="true"] { color: var(--y); }
 .moves > span.mv-on { background: color-mix(in srgb, var(--c, var(--text)) 22%, transparent); outline: 2px solid var(--c, var(--text)); outline-offset: 1px; }
 .mv { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 22px; width: fit-content; max-width: 100%; margin: 10px auto 6px;
   padding: 14px 18px; border-radius: 18px; background: rgba(10,12,18,.85); border: 1px solid var(--line); box-shadow: 0 20px 50px -20px rgba(0,0,0,.8); animation: pop .25s cubic-bezier(.3,1.4,.5,1); }
-.net { display: block; max-width: 100%; height: auto; }
-.net-hi { fill: none; stroke: var(--text); stroke-width: 2; animation: hi .5s ease-out; }
-@keyframes hi { from { stroke-width: 6; opacity: .3; } }
+.mv-cubes { display: flex; align-items: flex-end; gap: 6px; }
+.cube3d { display: block; max-width: 100%; height: auto; overflow: visible; }
+.cube-face { fill: #050608; stroke: #050608; stroke-width: .12; stroke-linejoin: round; }
+.cube-st { stroke: rgba(0,0,0,.25); stroke-width: .02; stroke-linejoin: round; }
+.cube-arrow path { fill: none; stroke: #0b0d12; stroke-width: .11; stroke-linecap: round; stroke-linejoin: round; }
+.cube-arrow polygon { fill: #0b0d12; stroke: #0b0d12; stroke-width: .04; stroke-linejoin: round; }
+.cube-arrow .halo { stroke: #fff; stroke-width: .27; fill: #fff; }
+.cube-arrow path.halo { fill: none; }
+.cube-arrow { animation: arrow-in .35s ease-out; }
+@keyframes arrow-in { from { opacity: 0; } }
+.mv-back { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: .85; }
+.mv-back figcaption { font-size: .66rem; color: var(--dim); text-transform: uppercase; letter-spacing: .12em; }
 .mv-side { display: flex; flex-direction: column; gap: 8px; min-width: 210px; }
 .mv-step { color: var(--dim); font-size: .7rem; text-transform: uppercase; letter-spacing: .14em; }
 .mv-move { display: flex; align-items: baseline; gap: 10px; min-height: 1.6em; }

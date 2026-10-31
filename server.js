@@ -423,10 +423,11 @@ function dailyChallenge() {
   return q.challenge.get(code);
 }
 // Others' times stay hidden until you've finished, so nobody gets spoiled or knows the time to beat
-function challengeView(c, uid) {
+// guestDone: a guest who did the daily on their device (unverifiable, so it only unhides times)
+function challengeView(c, uid, guestDone = false) {
   const rows = q.results.all(c.id);
   const mine = rows.find((r) => r.user_id === uid);
-  const reveal = mine?.time_ms != null;
+  const reveal = mine?.time_ms != null || guestDone;
   const results = rows.map((r) => ({
     username: r.username,
     me: r.user_id === uid,
@@ -491,6 +492,11 @@ async function handleApi(req, res, path) {
   }
   if (path === '/api/daily' || path === '/api/races' || path.startsWith('/api/challenges/')) {
     const user = currentUser(req);
+    // Guests can play the daily; their result stays on their device
+    if (!user && path === '/api/daily' && req.method === 'GET') {
+      const done = new URL(req.url, 'http://localhost').searchParams.get('done') === '1';
+      return json(res, 200, { ...challengeView(dailyChallenge(), null, done), done: false });
+    }
     if (!user) return json(res, 401, { error: 'Not logged in' });
     return handleChallenges(req, res, path, user.id);
   }

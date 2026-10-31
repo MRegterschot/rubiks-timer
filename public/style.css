@@ -391,6 +391,7 @@ button.primary.alt:hover { background: var(--glass-hi); color: var(--text); bord
 .ch-results li.win { border-color: rgba(255,210,63,.4); background: linear-gradient(90deg, rgba(255,210,63,.1), var(--glass) 60%); }
 .ch-results .rank { flex: none; width: 1.9rem; height: 1.9rem; font-size: .8rem; }
 .ch-who { flex: 1; display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; }
+.ch-guest { font-weight: 400; font-size: .7rem; color: var(--dim); margin-left: 4px; }
 .ch-results .val { font: 700 1.05rem var(--mono); min-width: 5ch; text-align: right; }
 .ch-results .val.wait { font: 400 .8rem "Space Grotesk", sans-serif; color: var(--dim); }
 .race-list { margin-top: 4px; max-height: 50vh; overflow: auto; }

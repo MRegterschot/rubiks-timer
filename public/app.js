@@ -904,7 +904,10 @@ async function stopRun() {
   setState('idle');
   if (isPb) { void timerEl.offsetWidth; timerEl.classList.add('pb'); isPb = false; }
   if (isTrain()) showTrainLast(p);
-  if (ch) queueChallenge(ch.code, { time_ms: ms, penalty: p.penalty }, true);
+  if (ch && guest) {
+    saveGuestDaily({ day: ch.code.slice(6), time_ms: ms, penalty: p.penalty });
+    openDaily();
+  } else if (ch) queueChallenge(ch.code, { time_ms: ms, penalty: p.penalty }, true);
   if (!guest) flushPending();
 }
 
@@ -1094,8 +1097,9 @@ function goGuest() {
   $('who').textContent = '';
   document.body.dataset.auth = 'guest';
   setMode(modeFromHash() === 'board' ? 'board' : mode);
-  $('daily-sub').textContent = 'Log in to play';
   $('daily-btn').classList.remove('done');
+  refreshDaily();
+  applyDailyLink();
 }
 // Login form; reason explains why (e.g. a race link needs an account)
 function showLogin(authView = 'login', reason = '') {
@@ -1298,6 +1302,21 @@ function startChallenge(v) {
 }
 $('ch-cancel').onclick = () => { challenge = null; showBanner(); newScramble(); };
 
+// Guest daily attempts live in localStorage only: one per day, never sent to the server
+const GUEST_DAILY = 'guest-daily';
+function guestDaily(day) {
+  try { const g = JSON.parse(localStorage.getItem(GUEST_DAILY)); return g && g.day === day ? g : null; } catch { return null; }
+}
+const saveGuestDaily = (g) => localStorage.setItem(GUEST_DAILY, JSON.stringify(g));
+// Today's daily; for guests with a local attempt, reveal times and add their row
+async function fetchDaily() {
+  let v = await api('GET', '/api/daily');
+  if (!isGuest()) return v;
+  const g = guestDaily(v.day);
+  if (!g) return v;
+  v = await api('GET', '/api/daily?done=1');
+  return { ...v, done: true, results: [...v.results, { username: 'You', me: true, guest: true, done: true, time_ms: g.time_ms, penalty: g.penalty }] };
+}
 function updateDaily(v) {
   const done = v.results.filter((r) => r.done), mine = v.results.find((r) => r.me && r.done);
   const rank = mine ? rankResults(v.results).indexOf(v.results.find((r) => r.me)) + 1 : 0;
@@ -1307,7 +1326,7 @@ function updateDaily(v) {
   $('daily-btn').classList.toggle('done', !!mine);
 }
 async function refreshDaily() {
-  try { updateDaily(await api('GET', '/api/daily')); } catch { /* offline */ }
+  try { updateDaily(await fetchDaily()); } catch { /* offline */ }
 }
 
 function renderChallenge() {
@@ -1315,7 +1334,7 @@ function renderChallenge() {
   const daily = v.kind === 'daily', allDone = v.results.length > 1 && v.results.every((r) => r.done);
   $('ch-title').textContent = daily ? 'Daily scramble' : `Race${v.created_by ? ` by ${v.created_by}` : ''}`;
   $('ch-sub').textContent = daily
-    ? `${new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · one attempt each. Times show once you've done yours.`
+    ? `${new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · one attempt each. Times show once you've done yours.${isGuest() ? " You're not logged in, so your result stays on this device and others won't see it." : ''}`
     : v.done ? (allDone ? 'Everyone finished.' : 'Waiting for the others. This updates by itself.') : 'Solve it, then see how everyone did.';
   $('ch-share').hidden = daily;
   $('ch-link').textContent = raceUrl(v.code);
@@ -1330,7 +1349,7 @@ function renderChallenge() {
     const pen = r.me && r.done ? ['+2', 'DNF'].map((p) => `<button type="button" data-pen="${p}" class="${r.penalty === p ? 'on' : ''}">${p}</button>`).join('') : '';
     return `<li class="${r.me ? 'me' : ''}${r === winner ? ' win' : ''}">
       <span class="rank">${r.done && r.time_ms !== null ? i + 1 : '·'}</span>
-      <span class="ch-who"><span class="avatar static">${esc(r.username[0].toUpperCase())}</span>${esc(r.username)}${r.username === me ? ' (you)' : ''}${r === winner ? ' 🏆' : ''}</span>
+      <span class="ch-who"><span class="avatar static">${esc(r.username[0].toUpperCase())}</span>${esc(r.username)}${r.username === me ? ' (you)' : ''}${r.guest ? ' <small class="ch-guest">not saved</small>' : ''}${r === winner ? ' 🏆' : ''}</span>
       ${pen}<b class="val ${r.time_ms === null ? 'wait' : ''}">${val}</b></li>`;
   }).join('') : '<li class="empty">Nobody has done this one yet</li>';
 }
@@ -1342,7 +1361,7 @@ async function openChallenge(v) {
   clearInterval(chPoll);
   chPoll = setInterval(async () => {
     if (!$('challenge-dialog').open) { clearInterval(chPoll); return; }
-    try { chView = await api('GET', `/api/challenges/${chView.code}`); renderChallenge(); } catch { /* keep last view */ }
+    try { chView = isGuest() ? await fetchDaily() : await api('GET', `/api/challenges/${chView.code}`); renderChallenge(); } catch { /* keep last view */ }
   }, 4000);
 }
 $('ch-close').onclick = () => $('challenge-dialog').close();
@@ -1360,8 +1379,16 @@ $('ch-results').onclick = async (e) => {
   const b = e.target.closest('[data-pen]');
   if (!b) return;
   const mine = chView.results.find((r) => r.me);
+  const penalty = mine.penalty === b.dataset.pen ? null : b.dataset.pen;
+  if (mine.guest) {
+    saveGuestDaily({ ...guestDaily(chView.day), penalty });
+    mine.penalty = penalty;
+    renderChallenge();
+    updateDaily(chView);
+    return;
+  }
   try {
-    chView = await api('PATCH', `/api/challenges/${chView.code}/result`, { penalty: mine.penalty === b.dataset.pen ? null : b.dataset.pen });
+    chView = await api('PATCH', `/api/challenges/${chView.code}/result`, { penalty });
     renderChallenge();
     if (chView.kind === 'daily') updateDaily(chView);
   } catch (err) { $('ch-error').textContent = err.message; }
@@ -1369,12 +1396,12 @@ $('ch-results').onclick = async (e) => {
 
 async function openDaily() {
   try {
-    const v = await api('GET', '/api/daily');
+    const v = await fetchDaily();
     updateDaily(v);
     openChallenge(v);
   } catch (e) { alert(e.message); }
 }
-$('daily-btn').onclick = () => (isGuest() ? showLogin('login', 'Log in or sign up to play the daily scramble.') : openDaily());
+$('daily-btn').onclick = openDaily;
 // Wordle-style share: your time and rank once done, otherwise an invite to play
 function dailyShareText(v) {
   const day = new Date(v.day + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -1402,11 +1429,7 @@ function applyDailyLink() {
   const linked = location.hash === '#daily' || sessionStorage.getItem('daily-link');
   if (!linked) return false;
   if (location.hash === '#daily') history.replaceState(null, '', location.pathname);
-  if (!authed()) {
-    sessionStorage.setItem('daily-link', '1');
-    if (isGuest()) showLogin('login', 'Log in or sign up to play the daily scramble.');
-    return true;
-  }
+  if (document.body.dataset.auth === 'pending') { sessionStorage.setItem('daily-link', '1'); return true; } // wait for /api/me
   sessionStorage.removeItem('daily-link');
   if (mode !== '333') setMode('333');
   openDaily();
@@ -1566,7 +1589,7 @@ api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem('me')); } catch { /* none */ }
   if (cached && e.status !== 401) signedIn(cached);
-  else { goGuest(); applyInviteLink(); applyRaceLink(); applyDailyLink(); }
+  else { goGuest(); applyInviteLink(); applyRaceLink(); }
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

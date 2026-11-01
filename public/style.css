@@ -25,6 +25,12 @@ body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-event
 .chrome { transition: opacity .35s ease; }
 body:is([data-state="running"], [data-state="ready"], [data-state="inspecting"]) .chrome { opacity: .06; pointer-events: none; }
 body[data-state="running"] .bg { opacity: .3; }
+/* BLD memo phase: only the memo inputs stay usable; checking is held back until the solve is over */
+body[data-phase="memo"] #bld { opacity: 1; pointer-events: auto; }
+body[data-phase="memo"] #bld > :not(.memo) { opacity: .06; pointer-events: none; }
+body[data-phase="memo"] #bld .memo { position: fixed; z-index: 25; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(520px, calc(100% - 24px)); background: #12141b; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+body[data-phase="memo"] #bld :is(.memo-actions, .memo-result, .memo-check, #memo-clear) { display: none; }
+body[data-phase="memo"] .stage { transform: translateY(-16vh); transition: transform .3s ease; }
 /* No scrolling away from the timer mid-solve; gutter stops the layout shifting when the scrollbar hides */
 html { scrollbar-gutter: stable; }
 body:is([data-state="holding"], [data-state="ready"], [data-state="inspecting"], [data-state="running"]) { overflow: hidden; }

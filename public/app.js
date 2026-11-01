@@ -835,10 +835,20 @@ const setState = (s) => {
   if (['holding', 'ready', 'inspecting', 'running'].includes(s)) closeViewer();
   state = s;
   document.body.dataset.state = s;
+  if (s !== 'running') setMemoPhase(false);
   pinTimer(['holding', 'ready', 'inspecting', 'running'].includes(s));
   timerEl.className = { holding: 'holding', ready: 'ready', inspecting: 'inspecting', running: 'running' }[s] || '';
 };
 const useInspection = () => mode === '333' && $('inspection').checked;
+// BLD memo phase: the memo card stays usable so letters can be written and read before executing
+function setMemoPhase(on) {
+  if (on) document.body.dataset.phase = 'memo';
+  else if (document.body.dataset.phase) {
+    delete document.body.dataset.phase;
+    if (document.activeElement?.closest('#bld')) document.activeElement.blur();
+  }
+}
+const inMemoPhase = () => document.body.dataset.phase === 'memo';
 const setSplit = (t) => { $('split').textContent = t; };
 
 function tick() {
@@ -868,6 +878,7 @@ function startRun() {
   setSplit(mode === 'bld' ? 'memo' : '');
   startTime = performance.now();
   setState('running');
+  setMemoPhase(mode === 'bld');
   raf = requestAnimationFrame(tick);
 }
 
@@ -1020,6 +1031,7 @@ function press() {
       memoAt = Math.round(performance.now() - startTime);
       splitAt = performance.now();
       setSplit(`memo ${fmt(memoAt)} · executing`);
+      setMemoPhase(false);
       return;
     }
     stopRun();
@@ -1059,6 +1071,11 @@ document.addEventListener('keydown', (e) => {
   if (!timerActive()) return;
   // Auto-repeat while holding space would otherwise scroll the page
   if (e.repeat) { if (e.code === 'Space' && !typing()) e.preventDefault(); return; }
+  // Typing memo letters: keys go to the input, Enter ends the memo
+  if (state === 'running' && inMemoPhase() && typing()) {
+    if (e.key === 'Enter') { e.preventDefault(); press(); }
+    return;
+  }
   if (state === 'running') { e.preventDefault(); press(); return; }
   if (typing()) { if (e.key === 'Escape' || e.key === 'Enter') document.activeElement.blur(); return; }
   if (['BUTTON', 'INPUT'].includes(document.activeElement?.tagName) && e.code === 'Space' && state === 'idle') {
@@ -1074,7 +1091,10 @@ document.addEventListener('keyup', (e) => {
 // Touch: whole timer area; any touch stops a running timer.
 timerEl.addEventListener('touchstart', (e) => { if (timerActive()) { e.preventDefault(); press(); } }, { passive: false });
 timerEl.addEventListener('touchend', (e) => { e.preventDefault(); release(); }, { passive: false });
-document.addEventListener('touchstart', (e) => { if (state === 'running') { e.preventDefault(); press(); } }, { passive: false });
+document.addEventListener('touchstart', (e) => {
+  if (inMemoPhase() && e.target.closest('#bld .memo')) return;
+  if (state === 'running') { e.preventDefault(); press(); }
+}, { passive: false });
 
 // ---------- tabs ----------
 function setMode(m) {

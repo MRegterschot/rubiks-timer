@@ -68,9 +68,13 @@ function newScramble() {
   if (challenge && mode === '333') scramble = challenge.scramble;
   else if (isTrain()) {
     const [id, , alg] = pickCase();
+    const pre = Math.floor(Math.random() * 4), post = Math.floor(Math.random() * 4);
     trainCase = id;
-    scramble = Cube.setup(alg, Math.floor(Math.random() * 4), Math.floor(Math.random() * 4));
+    scramble = Cube.setup(alg, pre, post);
     label = '<em class="scr-label">Setup</em>';
+    const sol = $('train-sol');
+    sol.dataset.start = scramble;
+    sol.innerHTML = '<em class="scr-label">Solve</em>' + chips(Cube.solution(alg, pre, post));
   } else scramble = genScramble();
   $('scramble').innerHTML = label + chips(scramble);
   hideMemoResult();

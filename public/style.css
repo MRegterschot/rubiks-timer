@@ -68,6 +68,13 @@ main { max-width: 960px; margin: 0 auto; padding: 8px 24px 48px; }
 #scramble span[data-f="U"] { --c: var(--w); } #scramble span[data-f="D"] { --c: var(--y); }
 #scramble span[data-f="F"] { --c: var(--g); } #scramble span[data-f="B"] { --c: var(--b); }
 #scramble span[data-f="R"] { --c: var(--r); } #scramble span[data-f="L"] { --c: var(--o); }
+/* Trainer solution line under the setup, smaller so the setup stays the focus */
+.train-sol { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 2px 0 6px; }
+.train-sol span { font: 600 .88rem var(--mono); padding: 3px 5px; border-radius: 7px; background: var(--glass); border: 1px solid var(--line);
+  border-bottom: 2px solid var(--c, var(--line)); min-width: 2em; text-align: center; color: var(--dim); animation: pop .4s backwards cubic-bezier(.3,1.5,.5,1); }
+.train-sol .scr-label { color: var(--g); }
+.train-sol span[data-f="U"] { --c: var(--w); } .train-sol span[data-f="D"] { --c: var(--y); } .train-sol span[data-f="F"] { --c: var(--g); }
+.train-sol span[data-f="B"] { --c: var(--b); } .train-sol span[data-f="R"] { --c: var(--r); } .train-sol span[data-f="L"] { --c: var(--o); }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.9); } }
 
 .stage { position: relative; padding: 4vh 0 3vh; }

@@ -95,6 +95,15 @@ const Cube = (() => {
     return fmtMoves(simplify([['U', pre], ...invert(faceMoves(alg)), ['U', post]]));
   }
 
+  // Alg that solves setup(alg, pre, post): undo the post-AUF, run the alg, undo the pre-AUF
+  function solution(alg, pre = 0, post = 0) {
+    const toks = alg.trim().split(/\s+/), U = { U: 1, U2: 2, "U2'": 2, "U'": 3 }, fmt = (k) => ['', 'U', 'U2', "U'"][k % 4];
+    let head = 4 - post, tail = 4 - pre;
+    if (U[toks[0]]) head += U[toks.shift()];
+    if (U[toks.at(-1)]) tail += U[toks.pop()];
+    return [fmt(head), ...toks, fmt(tail)].filter(Boolean).join(' ');
+  }
+
   // ---------- blindfolded (Old Pochmann, Speffz lettering) ----------
   const SPEFFZ = 'ULFRBD';
   const LETTER = { c: {}, e: {} }; // letter -> sticker index
@@ -246,6 +255,6 @@ const Cube = (() => {
     return `<svg class="cube3d" viewBox="${r2(x0)} ${r2(y0)} ${r2(w)} ${r2(h)}" width="${size}" height="${Math.round((size * h) / w)}" role="img" aria-label="${back ? 'Back of the cube' : 'Cube'}">${g}</svg>`;
   }
 
-  return { cubeSvg, solved, apply, faceMoves, fmtMoves, invert, simplify, setup, memo, memoSolves, llSvg, colorOf, at };
+  return { cubeSvg, solved, apply, faceMoves, fmtMoves, invert, simplify, setup, solution, memo, memoSolves, llSvg, colorOf, at };
 })();
 if (typeof module !== 'undefined') module.exports = Cube;

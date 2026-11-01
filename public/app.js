@@ -806,7 +806,7 @@ $('memo-reveal').onclick = () => {
   if ($('memo-reveal').dataset.open) return hideMemoResult();
   const e = Cube.memo(scramble, 'e'), c = Cube.memo(scramble, 'c');
   showMemoResult(`<span class="memo-sol e">Edges <b>${pairUp(e)}</b></span><span class="memo-sol c">Corners <b>${pairUp(c)}</b></span>
-    <small>${e.length % 2 ? 'Parity needed. ' : ''}Buffers UR and ULB; cycle breaks go to the lowest free letter, so yours may differ and still be right.</small>`, true);
+    <small>${e.length % 2 ? 'Parity needed. ' : ''}Buffers UR (U sticker) and ULB (L sticker); cycle breaks go to the lowest free letter, so yours may differ and still be right.</small>`, true);
 };
 $('parity-alg').innerHTML = chips(PARITY_ALG);
 $('edge-alg').innerHTML = chips(EDGE_ALG);

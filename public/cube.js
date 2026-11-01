@@ -103,7 +103,7 @@ const Cube = (() => {
     [0, 2, 8, 6].forEach((pos, k) => { const l = String.fromCharCode(65 + fi * 4 + k), i = FACES.indexOf(f) * 9 + pos; LETTER.c[l] = i; NAME.c[i] = l; });
     [1, 5, 7, 3].forEach((pos, k) => { const l = String.fromCharCode(65 + fi * 4 + k), i = FACES.indexOf(f) * 9 + pos; LETTER.e[l] = i; NAME.e[i] = l; });
   });
-  const BUFFER = { e: LETTER.e.B, c: LETTER.c.A }; // UR and ULB
+  const BUFFER = { e: LETTER.e.B, c: LETTER.c.E }; // UR (read U sticker) and ULB (read L sticker)
   const pieceKey = (i) => STICKERS[i].p.join();
   // Stickers of i's piece starting at i, corners in a fixed rotational order so swaps keep twists right
   function pieceFrom(i) {

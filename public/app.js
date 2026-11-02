@@ -692,12 +692,21 @@ function render() {
     ul.appendChild(li);
   });
 }
-// Guests keep solves in memory per mode only; nothing is sent to the server
-const guestSolves = {};
-let guestId = 0;
+// Guests keep solves per mode in localStorage on this device; they're uploaded when the user logs in
+const GUEST_KEY = 'guest-solves';
+const guestSolves = (() => {
+  try { const g = JSON.parse(localStorage.getItem(GUEST_KEY)); return g && typeof g === 'object' && !Array.isArray(g) ? g : {}; } catch { return {}; }
+})();
+let guestId = Math.min(0, ...Object.values(guestSolves).flat().map((s) => s.id || 0));
+function saveGuest() {
+  try {
+    if (Object.values(guestSolves).some((l) => l.length)) localStorage.setItem(GUEST_KEY, JSON.stringify(guestSolves));
+    else localStorage.removeItem(GUEST_KEY);
+  } catch { /* storage full */ }
+}
 const isGuest = () => document.body.dataset.auth === 'guest';
 async function setPenalty(id, penalty) {
-  if (isGuest()) { solves = guestSolves[mode] = solves.map((s) => (s.id === id ? { ...s, penalty } : s)); render(); return; }
+  if (isGuest()) { solves = guestSolves[mode] = solves.map((s) => (s.id === id ? { ...s, penalty } : s)); saveGuest(); render(); return; }
   try {
     const upd = await api('PATCH', `/api/solves/${id}`, { penalty });
     solves = solves.map((s) => (s.id === id ? upd : s));
@@ -705,7 +714,7 @@ async function setPenalty(id, penalty) {
   } catch (e) { alert(e.message); }
 }
 async function removeSolve(id) {
-  if (isGuest()) { solves = guestSolves[mode] = solves.filter((s) => s.id !== id); render(); return; }
+  if (isGuest()) { solves = guestSolves[mode] = solves.filter((s) => s.id !== id); saveGuest(); render(); return; }
   try { await api('DELETE', `/api/solves/${id}`); solves = solves.filter((s) => s.id !== id); render(); }
   catch (e) { alert(e.message); }
 }
@@ -911,7 +920,7 @@ async function stopRun() {
   isPb = eff(p) !== null && prevBest && eff(p) < eff(prevBest);
   if (!guest) savePending([...loadPending(), p]);
   solves.unshift(p);
-  if (guest) guestSolves[mode] = solves;
+  if (guest) { guestSolves[mode] = solves; saveGuest(); }
   render();
   if (mode === 'bld') clearMemo();
   if (p.penalty === 'DNF') timerEl.textContent = 'DNF';
@@ -980,6 +989,7 @@ function adoptGuestRuns(username) {
     for (const { id, ...s } of list.slice().reverse()) queued.push({ ...s, mode: m, client_id: newClientId(), user: username, pending: true });
   }
   for (const k of Object.keys(guestSolves)) delete guestSolves[k];
+  localStorage.removeItem(GUEST_KEY);
   if (queued.length) savePending([...loadPending(), ...queued]);
   let daily = false;
   try {

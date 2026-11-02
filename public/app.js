@@ -1235,11 +1235,11 @@ function renderInvites(list) {
     } else {
       li.innerHTML = `<span class="inv-status open">${daysLeft(inv.expires_at)}d left</span><code class="inv-link">${esc(inviteUrl(inv.code))}</code>`;
       const copy = document.createElement('button');
-      copy.textContent = navigator.share ? 'Share' : 'Copy';
+      copy.textContent = canShare() ? 'Share' : 'Copy';
       copy.onclick = async () => {
         const url = inviteUrl(inv.code);
         try {
-          if (navigator.share) await navigator.share({ title: 'Cube Timer invite', text: 'Join me on Cube Timer', url });
+          if (canShare()) await navigator.share({ title: 'Cube Timer invite', text: 'Join me on Cube Timer', url });
           else { await navigator.clipboard.writeText(url); copy.textContent = 'Copied!'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }
         } catch { /* share sheet dismissed */ }
       };
@@ -1428,7 +1428,7 @@ $('ch-start').onclick = () => startChallenge(chView);
 $('ch-copy').onclick = async () => {
   const url = raceUrl(chView.code);
   try {
-    if (navigator.share) await navigator.share({ title: 'Cube Timer race', text: 'Race me on this scramble', url });
+    if (canShare()) await navigator.share({ title: 'Cube Timer race', text: 'Race me on this scramble', url });
     else { await navigator.clipboard.writeText(url); $('ch-copy').textContent = 'Copied!'; setTimeout(() => { $('ch-copy').textContent = 'Copy'; }, 1500); }
   } catch { /* share sheet dismissed */ }
 };
@@ -1472,7 +1472,7 @@ function dailyShareText(v) {
 $('ch-share-daily').onclick = async () => {
   const btn = $('ch-share-daily'), text = dailyShareText(chView), url = `${location.origin}/#daily`;
   try {
-    if (navigator.share) await navigator.share({ title: 'Cube Timer daily scramble', text, url });
+    if (canShare()) await navigator.share({ title: 'Cube Timer daily scramble', text, url });
     else {
       await navigator.clipboard.writeText(`${text}\n${url}`);
       const label = btn.textContent;
@@ -1650,4 +1650,8 @@ api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+// The native share sheet is only pleasant on touch devices; on desktop (e.g. Windows 11) it opens a clunky window, so copy to the clipboard instead.
+function canShare() {
+  return !!navigator.share && (navigator.userAgentData?.mobile ?? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
 }

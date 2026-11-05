@@ -646,6 +646,26 @@ function solveItem(s, n, isPb) {
   li.innerHTML = `<span class="n">${n}.</span><div class="tm"><span class="t ${cls}">${fmtSolve(s)}</span>${sub.length ? `<span class="sub">${sub.join(' · ')}</span>` : ''}</div>`;
   return li;
 }
+// Share any solve: time, scramble and (for trainer solves) the case
+const MODE_NAMES = { 333: '3×3', bld: 'Blindfolded', oll2: '2-look OLL', pll2: '2-look PLL', oll: 'OLL', pll: 'PLL' };
+function solveShareText(s) {
+  const c = s.case_id && caseById(s.mode, s.case_id);
+  const when = `${fmtDate(s.created_at)}`;
+  const time = s.penalty === 'DNF' ? 'DNF 😬' : `⏱ ${fmtSolve(s)}`;
+  return `Cube Timer · ${MODE_NAMES[s.mode] || s.mode}${c ? ` · ${c[1]}` : ''} · ${when}\n${time}\nScramble: ${s.scramble}\nCan you beat it?`;
+}
+async function shareSolve(s, btn) {
+  const text = solveShareText(s), url = location.origin;
+  try {
+    if (canShare()) await navigator.share({ title: 'Cube Timer solve', text, url });
+    else {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      const label = btn.textContent;
+      btn.textContent = '✓';
+      setTimeout(() => { btn.textContent = label; }, 1500);
+    }
+  } catch { /* share sheet dismissed */ }
+}
 function render() {
   if (isTrain()) renderTrainer();
   else {
@@ -679,6 +699,12 @@ function render() {
       b.onclick = () => setPenalty(s.id, s.penalty === p ? null : p);
       li.appendChild(b);
     }
+    const share = document.createElement('button');
+    share.textContent = '↗';
+    share.setAttribute('aria-label', 'Share solve');
+    share.title = canShare() ? 'Share solve' : 'Copy solve to clipboard';
+    share.onclick = () => shareSolve(s, share);
+    li.appendChild(share);
     const del = document.createElement('button');
     del.textContent = '✕';
     del.className = 'danger';

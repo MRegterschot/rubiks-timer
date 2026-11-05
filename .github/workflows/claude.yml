@@ -22,11 +22,11 @@ jobs:
       (github.event_name == 'pull_request' && contains(github.event.pull_request.body, '@claude'))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write
+      pull-requests: write
+      issues: write
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,6 +38,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         env:
           CLAUDE_CODE_SUBAGENT_MODEL: claude-sonnet-5-5
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -51,5 +52,7 @@ jobs:
           # Optional: Add claude_args to customize behavior and configuration
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          claude_args: '--model claude-sonnet-5-5'
+          claude_args: |
+            --model claude-sonnet-5-5
+            --allowedTools "Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr merge:*),Bash(node --check:*)"
 

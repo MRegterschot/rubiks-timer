@@ -54,5 +54,5 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           claude_args: |
             --model claude-sonnet-5-5
-            --allowedTools "Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr merge:*),Bash(node --check:*)"
+            --allowedTools "Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr merge:*),Bash(node --check:*),Bash(gh issue close:*)"
 

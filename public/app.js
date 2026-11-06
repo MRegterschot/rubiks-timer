@@ -1514,8 +1514,8 @@ function applyRaceLink() {
 
 // ---------- leaderboard & profiles ----------
 const CATS = {
-  333: [['single', 'Single'], ['ao5', 'ao5'], ['ao12', 'ao12']],
-  bld: [['single', 'Single'], ['mo3', 'mo3'], ['success', 'Success rate']],
+  333: [['single', 'Single'], ['ao5', 'ao5'], ['ao12', 'ao12'], ['mean', 'Mean']],
+  bld: [['single', 'Single'], ['mo3', 'mo3'], ['mean', 'Mean'],['success', 'Success rate']],
 };
 let boardEvent = '333';
 let boardCat = 'single';

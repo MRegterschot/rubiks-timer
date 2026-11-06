@@ -96,7 +96,7 @@ main { max-width: 960px; margin: 0 auto; padding: 8px 24px 48px; }
 .mob { display: none; }
 kbd { font: 600 .75rem var(--mono); padding: 2px 7px; border-radius: 6px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--glass); color: var(--text); }
 
-.stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 36px; }
+.stats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 36px; }
 .stat { position: relative; overflow: hidden; background: var(--glass); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
 .stat::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--c); opacity: .8; }
 .stat:nth-child(1) { --c: var(--y); } .stat:nth-child(2) { --c: var(--g); } .stat:nth-child(3) { --c: var(--b); }
@@ -447,7 +447,7 @@ li .sub .memo-ok, li .sub .memo-bad { font-weight: 400; }
 .sessions:not(:empty) { margin: -22px 0 36px; }
 .sess-card { padding-bottom: 12px; }
 .sess-when { color: var(--dim); font-size: .8rem; }
-.sess-cur { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.sess-cur { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .sess-cur div { padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,.2); }
 .sess-cur span { display: block; color: var(--dim); font-size: .66rem; text-transform: uppercase; letter-spacing: .14em; margin-bottom: 3px; }
 .sess-cur b { font: 600 1.05rem var(--mono); }

@@ -166,16 +166,23 @@ function meanOf(n, list = solves) {
   const vals = list.slice(0, n).map(eff);
   return vals.includes(null) ? 'DNF' : vals.reduce((a, b) => a + b, 0) / n;
 }
+// Median of the valid (non-DNF) times; null if none.
+function medianOf(vals) {
+  if (!vals.length) return null;
+  const s = [...vals].sort((a, b) => a - b), h = s.length >> 1;
+  return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
+}
 function statsHtml(list, m) {
   const valid = list.map(eff).filter((v) => v !== null);
   const best = valid.length ? Math.min(...valid) : null;
   const mean = valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
+  const median = medianOf(valid);
   const f = (v) => (v === null ? '-' : v === 'DNF' ? 'DNF' : fmt(v));
   const items = m === 'bld'
     ? [['Best', f(best)], ['mo3', f(meanOf(3, list))], ['ao5', f(avgOf(5, list))],
-       ['Success', list.length ? `${valid.length}/${list.length}` : '-'], ['Mean', f(mean)], ['Solves', list.length]]
+       ['Success', list.length ? `${valid.length}/${list.length}` : '-'], ['Mean', f(mean)], ['Median', f(median)], ['Solves', list.length]]
     : [['Best', f(best)], ['ao5', f(avgOf(5, list))], ['ao12', f(avgOf(12, list))],
-       ['ao100', f(avgOf(100, list))], ['Mean', f(mean)], ['Solves', list.length]];
+       ['ao100', f(avgOf(100, list))], ['Mean', f(mean)], ['Median', f(median)], ['Solves', list.length]];
   return items.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('');
 }
 function renderStats() { $('stats').innerHTML = statsHtml(solves, mode); }
@@ -465,6 +472,7 @@ function sessionSummary(ss, m) {
     ok: valid.length,
     best: valid.length ? Math.min(...valid) : null,
     mean: valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null,
+    median: medianOf(valid),
     avg: m === 'bld' ? null : bestRolling(5, ss.solves),
   };
 }
@@ -476,8 +484,8 @@ function renderSessions() {
   const [cur, ...past] = all, list = cur.solves, sum = sessionSummary(cur, mode);
   const live = Date.now() - cur.end <= SESSION_GAP;
   const tiles = mode === 'bld'
-    ? [['Solves', sum.n], ['Success', `${sum.ok}/${sum.n}`], ['Best', f(sum.best)], ['mo3', f(meanOf(3, list))], ['Mean', f(sum.mean)]]
-    : [['Solves', sum.n], ['Best', f(sum.best)], ['ao5', f(avgOf(5, list))], ['ao12', f(avgOf(12, list))], ['Mean', f(sum.mean)]];
+    ? [['Solves', sum.n], ['Success', `${sum.ok}/${sum.n}`], ['Best', f(sum.best)], ['mo3', f(meanOf(3, list))], ['Mean', f(sum.mean)], ['Median', f(sum.median)]]
+    : [['Solves', sum.n], ['Best', f(sum.best)], ['ao5', f(avgOf(5, list))], ['ao12', f(avgOf(12, list))], ['Mean', f(sum.mean)], ['Median', f(sum.median)]];
   const shown = showAllSessions ? past : past.slice(0, 5);
   const rows = shown.map((ss) => {
     const x = sessionSummary(ss, mode);

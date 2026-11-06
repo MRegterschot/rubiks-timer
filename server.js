@@ -332,8 +332,7 @@ function leaderboard(mode) {
   }
   return [...byUser.values()].map(({ username, vals }) => {
     const ok = vals.filter((v) => v !== null);
-    const row = { username, solves: vals.length, single: ok.length ? Math.min(...ok) : null,
-      mean: ok.length ? Math.round(ok.reduce((a, b) => a + b, 0) / ok.length) : null };
+    const row = { username, solves: vals.length, single: ok.length ? Math.min(...ok) : null };
     if (mode === 'bld') Object.assign(row, { mo3: bestAvg(vals, 3, false), successes: ok.length });
     else Object.assign(row, { ao5: bestAvg(vals, 5, true), ao12: bestAvg(vals, 12, true) });
     return row;

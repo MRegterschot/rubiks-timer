@@ -1159,7 +1159,7 @@ function setMode(m) {
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
 const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train' })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
-  if (applyInviteLink() || applyRaceLink() || applyDailyLink()) return;
+  if (applyRaceLink() || applyDailyLink()) return;
   setMode(modeFromHash());
 });
 
@@ -1214,7 +1214,6 @@ function signedIn(user) {
   $('who').textContent = user.username;
   $('user-btn').textContent = user.username[0].toUpperCase();
   $('auth-pass').value = '';
-  $('auth-invite').value = '';
   $('auth-code').value = '';
   setMode(modeFromHash() === 'board' ? 'board' : mode);
   flushPending();
@@ -1230,7 +1229,6 @@ $('auth-form').onsubmit = async (e) => {
   $('auth-error').textContent = '';
   try {
     const body = { username: $('auth-user').value.trim(), password: $('auth-pass').value };
-    if (authMode === 'register') body.invite = $('auth-invite').value.trim();
     if (authMode === 'reset') body.code = $('auth-code').value.trim();
     const { user } = await api('POST', `/api/${authMode}`, body);
     const wasReset = authMode === 'reset';
@@ -1255,74 +1253,6 @@ $('logout').onclick = async () => {
   for (const k of Object.keys(localStorage)) if (k.startsWith('solves:')) localStorage.removeItem(k);
   goGuest();
 };
-
-// ---------- invites ----------
-const inviteUrl = (code) => `${location.origin}/#invite=${code}`;
-const daysLeft = (t) => Math.max(1, Math.ceil((t - Date.now()) / 864e5));
-function renderInvites(list) {
-  const ul = $('invite-list');
-  if (!list.length) { ul.innerHTML = '<li class="empty">No invites yet</li>'; return; }
-  ul.innerHTML = '';
-  for (const inv of list) {
-    const li = document.createElement('li');
-    if (inv.used_at) {
-      li.className = 'used';
-      li.innerHTML = `<span class="inv-status">Joined</span><span class="inv-who">${esc(inv.used_by || 'deleted user')}</span>`;
-    } else {
-      li.innerHTML = `<span class="inv-status open">${daysLeft(inv.expires_at)}d left</span><code class="inv-link">${esc(inviteUrl(inv.code))}</code>`;
-      const copy = document.createElement('button');
-      copy.textContent = canShare() ? 'Share' : 'Copy';
-      copy.onclick = async () => {
-        const url = inviteUrl(inv.code);
-        try {
-          if (canShare()) await navigator.share({ title: 'Cube Timer invite', text: 'Join me on Cube Timer', url });
-          else { await navigator.clipboard.writeText(url); copy.textContent = 'Copied!'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); }
-        } catch { /* share sheet dismissed */ }
-      };
-      const del = document.createElement('button');
-      del.textContent = '✕';
-      del.className = 'danger';
-      del.setAttribute('aria-label', 'Revoke invite');
-      del.onclick = async () => {
-        try { await api('DELETE', `/api/invites/${inv.code}`); loadInvites(); } catch (e) { $('invite-error').textContent = e.message; }
-      };
-      li.append(copy, del);
-    }
-    ul.appendChild(li);
-  }
-}
-async function loadInvites() {
-  try { renderInvites(await api('GET', '/api/invites')); } catch (e) { $('invite-error').textContent = e.message; }
-}
-$('invite-open').onclick = () => {
-  toggleMenu(false);
-  $('invite-error').textContent = '';
-  $('invite-dialog').showModal();
-  loadInvites();
-};
-$('invite-close').onclick = () => $('invite-dialog').close();
-$('invite-dialog').addEventListener('click', (e) => { if (e.target === $('invite-dialog')) $('invite-dialog').close(); });
-$('invite-create').onclick = async () => {
-  $('invite-error').textContent = '';
-  try {
-    const inv = await api('POST', '/api/invites');
-    await loadInvites();
-    await navigator.clipboard?.writeText(inviteUrl(inv.code)).catch(() => {});
-  } catch (e) { $('invite-error').textContent = e.message; }
-};
-
-// Invite links (#invite=CODE) open the sign-up form with the code filled in
-function applyInviteLink() {
-  const code = (location.hash.match(/^#invite=([A-Za-z0-9_-]+)$/) || [])[1] || sessionStorage.getItem('invite-link');
-  if (!code) return false;
-  if (location.hash.startsWith('#invite=')) history.replaceState(null, '', location.pathname);
-  if (document.body.dataset.auth === 'pending') { sessionStorage.setItem('invite-link', code); return true; } // wait for /api/me
-  sessionStorage.removeItem('invite-link');
-  if (authed()) return true; // already has an account
-  showLogin('register', "You've been invited! Pick a username and password.");
-  $('auth-invite').value = code;
-  return true;
-}
 
 // ---------- password & recovery ----------
 function openAccount(note) {
@@ -1674,7 +1604,6 @@ $('profile-dialog').addEventListener('click', (e) => { if (e.target === $('profi
 
 renderMemo();
 setAuthMode('login');
-applyInviteLink();
 applyRaceLink();
 applyDailyLink();
 api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
@@ -1682,7 +1611,7 @@ api('GET', '/api/me').then(({ user }) => signedIn(user)).catch((e) => {
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem('me')); } catch { /* none */ }
   if (cached && e.status !== 401) signedIn(cached);
-  else { goGuest(); applyInviteLink(); applyRaceLink(); }
+  else { goGuest(); applyRaceLink(); }
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});

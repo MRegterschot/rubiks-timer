@@ -10,10 +10,7 @@ const PORT = Number(process.env.PORT) || 3000;
 const DB_PATH = resolve(process.env.DB_PATH || './data/solves.db');
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), 'public');
 const MAX_BODY = 10 * 1024;
-const INVITE_CODE = process.env.INVITE_CODE || '';
 const SESSION_DAYS = 365;
-const INVITE_DAYS = 7;
-const MAX_OPEN_INVITES = 5;
 const DAY = 86400e3;
 const DAILY_TZ = process.env.DAILY_TZ || 'Europe/Amsterdam';
 const MAX_RACES_PER_DAY = 50;
@@ -52,14 +49,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE INDEX IF NOT EXISTS solves_user_mode ON solves (user_id, mode, id);
 -- Client-generated id makes save retries idempotent
 CREATE UNIQUE INDEX IF NOT EXISTS solves_user_client ON solves (user_id, client_id);
-CREATE TABLE IF NOT EXISTS invites (
-  code TEXT PRIMARY KEY,
-  created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  used_by INTEGER REFERENCES users(id),
-  used_at INTEGER
-);
 -- Shared-scramble events: one per day ('daily') or created by a user ('race')
 CREATE TABLE IF NOT EXISTS challenges (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,13 +106,6 @@ const q = {
     FROM challenges c LEFT JOIN users cu ON cu.id = c.created_by
     WHERE c.kind = 'race' AND (c.created_by = ? OR EXISTS (SELECT 1 FROM challenge_results r WHERE r.challenge_id = c.id AND r.user_id = ?))
     ORDER BY c.created_at DESC LIMIT 20`),
-  invites: db.prepare(`SELECT i.code, i.created_at, i.expires_at, i.used_at, u.username AS used_by FROM invites i
-    LEFT JOIN users u ON u.id = i.used_by WHERE i.created_by = ? AND (i.used_at IS NOT NULL OR i.expires_at > ?) ORDER BY i.created_at DESC LIMIT 20`),
-  openInvites: db.prepare('SELECT COUNT(*) AS n FROM invites WHERE created_by = ? AND used_at IS NULL AND expires_at > ?'),
-  insertInvite: db.prepare('INSERT INTO invites (code, created_by, created_at, expires_at) VALUES (?, ?, ?, ?)'),
-  delInvite: db.prepare('DELETE FROM invites WHERE code = ? AND created_by = ? AND used_at IS NULL'),
-  claimInvite: db.prepare('UPDATE invites SET used_at = ? WHERE code = ? AND used_at IS NULL AND expires_at > ?'),
-  inviteUsedBy: db.prepare('UPDATE invites SET used_by = ? WHERE code = ?'),
   boardSolves: db.prepare('SELECT s.user_id, u.username, s.time_ms, s.penalty FROM solves s JOIN users u ON u.id = s.user_id WHERE s.mode = ? ORDER BY s.user_id, s.id'),
   publicSolves: db.prepare('SELECT id, time_ms, scramble, penalty, created_at, mode, memo_ms, edges, corners FROM solves WHERE user_id = ? AND mode = ? ORDER BY id DESC LIMIT 1000'),
 };
@@ -203,7 +185,7 @@ function credentials(b) {
   return { username, password };
 }
 
-// Failed login/invite attempts per client IP and per username, 15 minute window
+// Failed login attempts per client IP and per username, 15 minute window
 const attempts = new Map();
 const LIMIT = 10, WINDOW = 15 * 60e3;
 const clientIp = (req) => req.headers['cf-connecting-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress;
@@ -247,7 +229,7 @@ async function handleAuth(req, res, path) {
       setSessionCookie(req, res, u.token, SESSION_DAYS * 86400);
     }
     const hasRecovery = !!q.userById.get(u.id)?.recovery_hash;
-    return json(res, 200, { user: { id: u.id, username: u.username, hasRecovery }, inviteRequired: !!INVITE_CODE });
+    return json(res, 200, { user: { id: u.id, username: u.username, hasRecovery } });
   }
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed' });
 
@@ -263,25 +245,12 @@ async function handleAuth(req, res, path) {
   if (path === '/api/register') {
     if (limited([ipKey])) throw fail(429, 'Too many attempts, try again in 15 minutes');
     const { username, password } = credentials(b);
-    const invite = typeof b.invite === 'string' ? b.invite.trim() : '';
-    // The global code is for bootstrapping; personal invites are single-use
-    const global = INVITE_CODE ? invite === INVITE_CODE : true;
-    const personal = !global && /^[A-Za-z0-9_-]{8,64}$/.test(invite);
-    if (!global && !personal) { recordFail([ipKey]); throw fail(403, 'Invalid invite code'); }
     if (q.userByName.get(username)) throw fail(409, 'That username is taken');
     const pwHash = await hashPassword(password);
     let userId;
-    db.exec('BEGIN');
     try {
-      if (personal && !q.claimInvite.run(Date.now(), invite, Date.now()).changes) {
-        recordFail([ipKey]);
-        throw fail(403, 'This invite is invalid, already used or expired');
-      }
       userId = Number(q.insertUser.run(username, pwHash, Date.now()).lastInsertRowid);
-      if (personal) q.inviteUsedBy.run(userId, invite);
-      db.exec('COMMIT');
     } catch (e) {
-      db.exec('ROLLBACK');
       if (String(e.message).includes('UNIQUE')) throw fail(409, 'That username is taken');
       throw e;
     }
@@ -384,22 +353,6 @@ function handlePublic(req, res, path) {
   return json(res, 200, { username: user.username, mode, solves: q.publicSolves.all(user.id, mode) });
 }
 
-function handleInvites(req, res, path, uid) {
-  const now = Date.now();
-  if (path === '/api/invites' && req.method === 'GET') return json(res, 200, q.invites.all(uid, now));
-  if (path === '/api/invites' && req.method === 'POST') {
-    if (q.openInvites.get(uid, now).n >= MAX_OPEN_INVITES) throw fail(429, `You already have ${MAX_OPEN_INVITES} unused invites. Revoke one or wait for them to be used.`);
-    const code = randomBytes(9).toString('base64url');
-    q.insertInvite.run(code, uid, now, now + INVITE_DAYS * DAY);
-    return json(res, 201, { code, created_at: now, expires_at: now + INVITE_DAYS * DAY, used_at: null, used_by: null });
-  }
-  const m = path.match(/^\/api\/invites\/([A-Za-z0-9_-]+)$/);
-  if (m && req.method === 'DELETE') {
-    return q.delInvite.run(m[1], uid).changes ? json(res, 200, { ok: true }) : json(res, 404, { error: 'Invite not found or already used' });
-  }
-  json(res, 404, { error: 'Not found' });
-}
-
 // ---------- daily scramble & races ----------
 function genScramble() {
   const faces = 'UDLRFB', axis = { U: 0, D: 0, L: 1, R: 1, F: 2, B: 2 }, mods = ['', "'", '2'];
@@ -485,11 +438,6 @@ async function handleChallenges(req, res, path, uid) {
 async function handleApi(req, res, path) {
   if (['/api/me', '/api/login', '/api/register', '/api/logout', '/api/password', '/api/recovery', '/api/reset'].includes(path)) return handleAuth(req, res, path);
   if (path === '/api/leaderboard' || path.startsWith('/api/users/')) return handlePublic(req, res, path);
-  if (path === '/api/invites' || path.startsWith('/api/invites/')) {
-    const user = currentUser(req);
-    if (!user) return json(res, 401, { error: 'Not logged in' });
-    return handleInvites(req, res, path, user.id);
-  }
   if (path === '/api/daily' || path === '/api/races' || path.startsWith('/api/challenges/')) {
     const user = currentUser(req);
     // Guests can play the daily; their result stays on their device

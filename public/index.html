@@ -40,7 +40,6 @@
         <button id="user-btn" class="avatar" aria-haspopup="true" aria-expanded="false" aria-label="Account"></button>
         <div id="user-menu" class="user-menu" role="menu">
           <div class="who">Signed in as <b id="who"></b></div>
-          <button id="invite-open" role="menuitem" class="menu-accent">Invite friends</button>
           <button id="account-open" role="menuitem">Password &amp; recovery</button>
           <button id="logout" role="menuitem">Log out</button>
         </div>
@@ -61,7 +60,6 @@
       <label class="field"><span>Username</span><input id="auth-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
       <label class="field reset-only"><span>Recovery code</span><input id="auth-code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX"></label>
       <label class="field"><span id="auth-pass-label">Password</span><input id="auth-pass" name="password" type="password" autocomplete="current-password" required></label>
-      <label class="field reg-only"><span>Invite code</span><input id="auth-invite" name="invite" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
       <p id="auth-error" class="auth-error" role="alert"></p>
       <button id="auth-submit" class="primary" type="submit">Log in</button>
       <button id="auth-forgot" class="link" type="button">Forgot password?</button>
@@ -69,17 +67,6 @@
       <button id="auth-guest" class="link" type="button">Continue without an account</button>
     </form>
   </section>
-
-  <dialog id="invite-dialog" class="dialog">
-    <div class="dialog-head">
-      <h2>Invite friends</h2>
-      <button id="invite-close" class="icon" aria-label="Close">✕</button>
-    </div>
-    <p class="dialog-sub">Each link creates one account and expires after 7 days.</p>
-    <button id="invite-create" class="primary">Create invite link</button>
-    <p id="invite-error" class="auth-error" role="alert"></p>
-    <ul id="invite-list" class="invite-list"></ul>
-  </dialog>
 
   <dialog id="confirm-dialog" class="dialog narrow">
     <h2 id="confirm-title" class="confirm-title"></h2>

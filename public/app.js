@@ -1312,6 +1312,7 @@ function rankResults(results) {
 function showBanner() {
   $('ch-banner').hidden = !challenge;
   $('challenges').hidden = !!challenge;
+  document.body.classList.toggle('challenge-active', !!challenge);
   if (challenge) $('ch-banner-text').innerHTML = `<b>${challenge.kind === 'daily' ? 'Daily scramble' : 'Race'}</b> · one attempt, it counts when you stop the timer`;
 }
 function startChallenge(v) {
@@ -1324,6 +1325,13 @@ function startChallenge(v) {
   timerEl.focus();
 }
 $('ch-cancel').onclick = () => { challenge = null; showBanner(); newScramble(); };
+
+$('new-scramble').onclick = (e) => {
+  if (state !== 'idle' && state !== 'stopped') return;
+  if (challenge) return; // a daily/race scramble is fixed
+  newScramble();
+  e.currentTarget.blur();
+};
 
 // Guest daily attempts live in localStorage only: one per day, never sent to the server
 const GUEST_DAILY = 'guest-daily';

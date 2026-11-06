@@ -527,3 +527,7 @@ li .sub .case-name { color: var(--o); }
   .desk { display: none; } .mob { display: inline; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+#new-scramble { display: block; margin: 0 auto 6px; padding: 5px 12px; font: 600 .85rem var(--mono); color: inherit; background: var(--glass); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+#new-scramble:hover { border-color: currentColor; }
+body.challenge-active #new-scramble { display: none; }

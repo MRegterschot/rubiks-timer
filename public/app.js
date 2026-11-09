@@ -11,9 +11,13 @@ const timerEl = $('timer');
 
 const TRAIN = new Set(['oll2', 'pll2', 'oll', 'pll']);
 let trainSet = TRAIN.has(localStorage.getItem('train-set')) ? localStorage.getItem('train-set') : 'pll';
-let mode = { '#bld': 'bld', '#train': trainSet }[location.hash] || '333';
+// Other cube sizes: mode id -> cube size. They share the 3×3 timer, inspection and stats.
+const SIZES = { 222: 2, 444: 4, 555: 5, 666: 6, 777: 7 };
+const SIZE_HASH = { '#2x2': '222', '#4x4': '444', '#5x5': '555', '#6x6': '666', '#7x7': '777' };
+const SIZE_TAB_HASH = { 222: '#2x2', 444: '#4x4', 555: '#5x5', 666: '#6x6', 777: '#7x7' };
+let mode = { '#bld': 'bld', '#train': trainSet, ...SIZE_HASH }[location.hash] || '333';
 const isTrain = () => TRAIN.has(mode);
-const MODE_LABEL = { 333: '3×3', bld: 'blindfolded', pll: 'PLL trainer', oll: 'OLL trainer', pll2: '2-look PLL trainer', oll2: '2-look OLL trainer' };
+const MODE_LABEL = { 222: '2×2', 333: '3×3', 444: '4×4', 555: '5×5', 666: '6×6', 777: '7×7', bld: 'blindfolded', pll: 'PLL trainer', oll: 'OLL trainer', pll2: '2-look PLL trainer', oll2: '2-look OLL trainer' };
 let solves = [];
 let scramble = '';
 let state = 'idle'; // idle | holding | ready | inspecting | running | stopped
@@ -42,7 +46,7 @@ function fmt(ms) {
 const eff = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
 const fmtSolve = (s) => (s.penalty === 'DNF' ? 'DNF' : fmt(eff(s)) + (s.penalty === '+2' ? '+' : ''));
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m[0]}" tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
+const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m.match(/[A-Za-z]/)[0]}"tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
 
 // ---------- scramble ----------
 function genScramble() {
@@ -62,6 +66,26 @@ function genScramble() {
   }
   return moves.join(' ');
 }
+// 2×2: short random-move scramble. 4×4+: random outer and wide-layer turns (WCA-style notation: Rw, 3Rw), never
+// repeating a face within a run of turns on the same axis.
+function genSizeScramble(n) {
+  const faces = ['U', 'D', 'L', 'R', 'F', 'B'], axis = { U: 0, D: 0, L: 1, R: 1, F: 2, B: 2 }, mods = ['', "'", '2'];
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const use = n === 2 ? ['U', 'R', 'F'] : faces;
+  const layers = n === 2 ? [''] : n <= 5 ? ['', 'w'] : ['', 'w', '3'];
+  const len = n === 2 ? 10 : { 4: 40, 5: 60, 6: 80, 7: 100 }[n];
+  const moves = [];
+  let run = new Set(), ax = -1;
+  while (moves.length < len) {
+    const f = pick(use);
+    if (axis[f] === ax && run.has(f)) continue;
+    if (axis[f] !== ax) { run = new Set(); ax = axis[f]; }
+    run.add(f);
+    const l = pick(layers);
+    moves.push((l === '3' ? '3' + f + 'w' : f + l) + pick(mods));
+  }
+  return moves.join(' ');
+}
 function newScramble() {
   closeViewer();
   let label = '';
@@ -75,7 +99,7 @@ function newScramble() {
     const sol = $('train-sol');
     sol.dataset.start = scramble;
     sol.innerHTML = '<em class="scr-label">Solve</em>' + chips(Cube.solution(alg, pre, post));
-  } else scramble = genScramble();
+  } else scramble = SIZES[mode] ? genSizeScramble(SIZES[mode]) : genScramble();
   $('scramble').innerHTML = label + chips(scramble);
   hideMemoResult();
 }
@@ -118,6 +142,7 @@ function renderViewer() {
   markChips(mvSrc, p);
 }
 function openViewer(src, i) {
+  if (SIZES[mode]) return; // the cube model is 3×3 only
   if (mvSrc && mvSrc !== src) markChips(mvSrc, 0);
   try { mvStart = Cube.apply(Cube.solved(), src.dataset.start || ''); } catch { return; }
   mvSrc = src;
@@ -655,7 +680,7 @@ function solveItem(s, n, isPb) {
   return li;
 }
 // Share any solve: time, scramble and (for trainer solves) the case
-const MODE_NAMES = { 333: '3×3', bld: 'Blindfolded', oll2: '2-look OLL', pll2: '2-look PLL', oll: 'OLL', pll: 'PLL' };
+const MODE_NAMES = { 222: '2×2', 333: '3×3', 444: '4×4', 555: '5×5', 666: '6×6', 777: '7×7', bld: 'Blindfolded', oll2: '2-look OLL', pll2: '2-look PLL', oll: 'OLL', pll: 'PLL' };
 function solveShareText(s) {
   const c = s.case_id && caseById(s.mode, s.case_id);
   const when = `${fmtDate(s.created_at)}`;
@@ -886,7 +911,7 @@ const setState = (s) => {
   pinTimer(['holding', 'ready', 'inspecting', 'running'].includes(s));
   timerEl.className = { holding: 'holding', ready: 'ready', inspecting: 'inspecting', running: 'running' }[s] || '';
 };
-const useInspection = () => mode === '333' && $('inspection').checked;
+const useInspection = () => (mode === '333' || !!SIZES[mode]) && $('inspection').checked;
 // BLD memo phase: the memo card stays usable so letters can be written and read before executing
 function setMemoPhase(on) {
   if (on) document.body.dataset.phase = 'memo';
@@ -1154,7 +1179,7 @@ function setMode(m) {
   const tab = isTrain() ? 'train' : m;
   document.body.dataset.mode = m;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === tab)));
-  history.replaceState(null, '', { bld: '#bld', train: '#train' }[tab] || location.pathname);
+  history.replaceState(null, '', { bld: '#bld', train: '#train', ...SIZE_TAB_HASH }[tab] || location.pathname);
   timerEl.textContent = '0.00';
   setSplit('');
   $('train-last').hidden = true;
@@ -1165,7 +1190,7 @@ function setMode(m) {
   else { solves = guestSolves[m] || []; render(); }
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train' })[location.hash] || '333';
+const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train', ...SIZE_HASH })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
   if (applyRaceLink() || applyDailyLink()) return;
   setMode(modeFromHash());

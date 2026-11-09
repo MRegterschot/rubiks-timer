@@ -43,6 +43,8 @@ The **Leaderboard** tab ranks everyone by best single, ao5 and ao12 for 3×3, an
 
 ## Features
 
+- **Cube sizes**: 2×2 to 7×7 tabs, each with its own page (`#2x2`, `#4x4`, `#5x5`, `#6x6`, `#7x7`; 3×3 is the default page) and its own solve history (modes `222`, `444`, `555`, `666`, `777`). 2×2 uses a short random-move scramble, 4×4 and up use wide-layer turns (`Rw`, `3Rw`). Inspection and stats work as on 3×3. The move viewer, daily scramble, races and leaderboard are 3×3 only.
+
 - **Sessions**: solves are grouped automatically; a new session starts after an hour without solves. Each session gets its own stats, and the solve list shows dividers.
 - **Blindfolded memo check**: `public/cube.js` simulates the cube. It checks your memo against the scramble (Old Pochmann, Speffz, buffers UR (U sticker) and ULB (L sticker); any valid cycle break counts as correct) and can show the solution. Past BLD solves show whether the memo was right.
 - **Trainer** tab: 2-look OLL (edges, then corners), 2-look PLL (corners, then edges), full OLL and full PLL drills. You get a face-turn setup, solve the case, and per-case times are tracked. Slow and new cases come up more often. Attempts are stored as solves with mode `oll2`/`pll2`/`oll`/`pll` and a `case_id`. Algs are in `public/algs.js`.

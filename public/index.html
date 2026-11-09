@@ -183,13 +183,15 @@
 
     <div class="stage">
       <div id="timer" tabindex="0" role="timer" aria-label="Timer">0.00</div>
-      <div id="hint" class="chrome"><span class="desk">Hold <kbd>space</kbd> or touch &amp; hold</span><span class="mob">Touch &amp; hold</span> until green, release to start<span class="only-bld"> · press once to end memo, again to stop. You can type letters during memo; <kbd>Enter</kbd> ends it</span></div>
+      <div class="stage-foot">
+        <div id="hint" class="chrome"><span class="desk">Hold <kbd>space</kbd> or touch &amp; hold</span><span class="mob">Touch &amp; hold</span> until green, release to start<span class="only-bld"> · press once to end memo, again to stop. You can type letters during memo; <kbd>Enter</kbd> ends it</span></div>
+        <label class="switch only-333 chrome">
+          <input type="checkbox" id="inspection">
+          <span class="track"><span class="knob"></span></span>
+          <span class="label">15s inspection</span>
+        </label>
+      </div>
       <div id="split" class="split"></div>
-      <label class="switch only-333 chrome">
-        <input type="checkbox" id="inspection">
-        <span class="track"><span class="knob"></span></span>
-        <span class="label">15s inspection</span>
-      </label>
     </div>
 
     <section id="bld" class="bld only-bld chrome">

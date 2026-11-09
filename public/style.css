@@ -145,9 +145,7 @@ button.danger:hover { border-color: var(--r); color: var(--r); background: color
 /* Mode tabs */
 body:not([data-mode="bld"]) .only-bld, body:not(:is([data-mode="333"], [data-mode="222"], [data-mode="444"], [data-mode="555"], [data-mode="666"], [data-mode="777"])) .only-333 { display: none !important; }
 body:not(:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"])) .only-train, body:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"]) .no-train { display: none !important; }
-/* Keep the switch's space so the header layout stays put */
-body:not(:is([data-mode="333"], [data-mode="222"], [data-mode="444"], [data-mode="555"], [data-mode="666"], [data-mode="777"])) .switch.only-333 { display: flex !important; visibility: hidden; }
-.switch { justify-self: end; }
+.stage .switch { justify-content: center; margin-top: 14px; }
 .tabs { display: flex; gap: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 3px; border-radius: 12px; background: var(--glass); border: 1px solid var(--line); }
 .tabs button { flex: 0 0 auto; border: 0; border-radius: 9px; padding: 7px 12px; font-size: .85rem; color: var(--dim); }
 .tabs button[aria-selected="true"] { background: var(--glass-hi); color: var(--text); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 4px 14px -6px rgba(0,0,0,.6); }

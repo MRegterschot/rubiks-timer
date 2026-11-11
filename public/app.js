@@ -1176,10 +1176,12 @@ function setMode(m) {
   if (m === 'train') m = trainSet;
   if (m !== '333' && challenge) { challenge = null; showBanner(); }
   mode = m;
-  const tab = isTrain() ? 'train' : m;
+  const tab = isTrain() ? 'train' : (m in SIZE_TAB_HASH ? '333' : m);
   document.body.dataset.mode = m;
+  const sizeSel = $('size-select');
+  if (sizeSel && /^[2-7]{3}$/.test(m)) sizeSel.value = m;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === tab)));
-  history.replaceState(null, '', { bld: '#bld', train: '#train', ...SIZE_TAB_HASH }[tab] || location.pathname);
+  history.replaceState(null, '', { bld: '#bld', train: '#train', ...SIZE_TAB_HASH }[m in SIZE_TAB_HASH ? m : tab] || location.pathname);
   timerEl.textContent = '0.00';
   setSplit('');
   $('train-last').hidden = true;
@@ -1190,6 +1192,13 @@ function setMode(m) {
   else { solves = guestSolves[m] || []; render(); }
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
+if (/^[2-7]{3}$/.test(mode)) $('size-select').value = mode;
+$('size-select').onchange = (e) => {
+  const prev = mode;
+  setMode(e.target.value);
+  if (mode !== e.target.value) e.target.value = prev; // blocked while timing
+  e.target.blur();
+};
 const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train', ...SIZE_HASH })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
   if (applyRaceLink() || applyDailyLink()) return;

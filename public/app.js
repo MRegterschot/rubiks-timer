@@ -46,7 +46,10 @@ function fmt(ms) {
 const eff = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
 const fmtSolve = (s) => (s.penalty === 'DNF' ? 'DNF' : fmt(eff(s)) + (s.penalty === '+2' ? '+' : ''));
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m.match(/[A-Za-z]/)[0]}"tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
+const chips = (alg) => alg.split(' ').map((m, i) => {
+  const face = (m.match(/[A-Za-z]/) || [''])[0];
+  return `<span data-f="${esc(face)}" tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${esc(m)}</span>`;
+}).join('');
 
 // ---------- scramble ----------
 function genScramble() {
@@ -1150,7 +1153,8 @@ function release() {
 const typing = () => document.activeElement?.tagName === 'INPUT' && ['text', 'password'].includes(document.activeElement.type);
 const authed = () => document.body.dataset.auth === 'in';
 // Timer only listens on the timer tabs with no dialog open
-const timerActive = () => (authed() || isGuest()) && document.body.dataset.mode !== 'board' && !document.querySelector('dialog[open]');
+const PAGES = ['board', 'notation'];
+const timerActive = () => (authed() || isGuest()) && !PAGES.includes(document.body.dataset.mode) && !document.querySelector('dialog[open]');
 document.addEventListener('keydown', (e) => {
   if (mvSrc && state === 'idle' && !typing() && !document.querySelector('dialog[open]')) {
     const act = { ArrowLeft: 'prev', ArrowRight: 'next', Home: 'first', End: 'last', Escape: 'close' }[e.key];
@@ -1189,6 +1193,7 @@ document.addEventListener('touchstart', (e) => {
 function setMode(m) {
   if (state !== 'idle' && state !== 'stopped') return;
   if (m === 'board') { showBoard(); return; }
+  if (m === 'notation') { showNotation(); return; }
   if (m === 'train') m = trainSet;
   if (m !== '333' && challenge) { challenge = null; showBanner(); }
   mode = m;
@@ -1215,7 +1220,7 @@ $('size-select').onchange = (e) => {
   if (mode !== e.target.value) e.target.value = prev; // blocked while timing
   e.target.blur();
 };
-const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#train': 'train', ...SIZE_HASH })[location.hash] || '333';
+const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#notation': 'notation', '#train': 'train', ...SIZE_HASH })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
   if (applyRaceLink() || applyDailyLink()) return;
   setMode(modeFromHash());
@@ -1245,7 +1250,7 @@ function goGuest() {
   localStorage.removeItem('me');
   $('who').textContent = '';
   document.body.dataset.auth = 'guest';
-  setMode(modeFromHash() === 'board' ? 'board' : mode);
+  setMode(PAGES.includes(modeFromHash()) ? modeFromHash() : mode);
   $('daily-btn').classList.remove('done');
   refreshDaily();
   applyDailyLink();
@@ -1273,7 +1278,7 @@ function signedIn(user) {
   $('user-btn').textContent = user.username[0].toUpperCase();
   $('auth-pass').value = '';
   $('auth-code').value = '';
-  setMode(modeFromHash() === 'board' ? 'board' : mode);
+  setMode(PAGES.includes(modeFromHash()) ? modeFromHash() : mode);
   flushPending();
   refreshDaily();
   applyRaceLink();
@@ -1579,6 +1584,12 @@ let boardEvent = '333';
 let boardCat = 'single';
 let boardRows = [];
 const segSelect = (id, attr, val) => document.querySelectorAll(`#${id} button`).forEach((b) => b.setAttribute('aria-selected', String(b.dataset[attr] === val)));
+
+function showNotation() {
+  document.body.dataset.mode = 'notation';
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === 'notation')));
+  history.replaceState(null, '', '#notation');
+}
 
 function showBoard() {
   document.body.dataset.mode = 'board';

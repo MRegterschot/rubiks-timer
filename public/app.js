@@ -738,7 +738,23 @@ function render() {
     share.title = canShare() ? 'Share solve' : 'Copy solve to clipboard';
     share.onclick = () => shareSolve(s, share);
     li.appendChild(share);
-    const del = document.createElement('button');
+    if (!isTrain() && s.scramble) {
+      const use = document.createElement('button');
+      use.textContent = '⟲';
+      use.setAttribute('aria-label', 'Use this scramble');
+      use.title = 'Use this solve\'s scramble as the current scramble';
+      use.onclick = () => {
+        if (state !== 'idle' && state !== 'stopped') return;
+        if (challenge) { challenge = null; showBanner(); }
+        closeViewer();
+        scramble = s.scramble;
+        $('scramble').innerHTML = chips(scramble);
+        hideMemoResult();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      li.appendChild(use);
+    }
+    const del =document.createElement('button');
     del.textContent = '✕';
     del.className = 'danger';
     del.setAttribute('aria-label', 'Delete solve');

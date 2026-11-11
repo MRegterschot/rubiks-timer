@@ -252,6 +252,18 @@ button.icon { width: 34px; padding: 0; }
 .inv-who { flex: 1; font-weight: 600; }
 li.used { opacity: .75; }
 
+/* Notation page */
+body[data-mode="notation"] #app > :not(#notation) { display: none; }
+body:not([data-mode="notation"]) #notation { display: none; }
+body[data-mode="notation"] .tabs button[aria-selected="true"] { color: var(--y); }
+.notation { padding-top: 18px; animation: pop .35s backwards; }
+.note-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 16px; }
+.note-grid h3 { margin: 0 0 10px; }
+.note-grid ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.note-grid li { display: flex; align-items: baseline; gap: 12px; }
+.note-grid li kbd { min-width: 3.2rem; text-align: center; font: 700 1rem var(--mono); }
+.note-grid li span { color: var(--dim); font-size: .9rem; }
+
 /* Leaderboard */
 body[data-mode="board"] #app > :not(#board) { display: none; }
 body:not([data-mode="board"]) #board { display: none; }

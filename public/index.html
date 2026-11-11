@@ -33,6 +33,7 @@
       <button role="tab" data-mode="bld">Blindfolded</button>
       <button role="tab" data-mode="train">Trainer</button>
       <button role="tab" data-mode="board">Leaderboard</button>
+      <button role="tab" data-mode="notation">Notation</button>
     </nav>
     <div class="right">
       <button id="login-btn" type="button" class="login-btn guest-only">Log in</button>
@@ -154,7 +155,61 @@
       <ol id="board-list" class="board-list"></ol>
     </section>
 
-    <div id="challenges" class="challenges chrome only-333">
+    <section id="notation" class="notation">
+      <h2 class="board-title">Move notation</h2>
+      <p class="board-sub">How to read scrambles and algorithms. Faces are named from your point of view while holding the cube.</p>
+      <div class="note-grid">
+        <div class="card"><h3>Faces</h3>
+          <ul>
+            <li><kbd>U</kbd><span>Up: the top face</span></li>
+            <li><kbd>D</kbd><span>Down: the bottom face</span></li>
+            <li><kbd>R</kbd><span>Right face</span></li>
+            <li><kbd>L</kbd><span>Left face</span></li>
+            <li><kbd>F</kbd><span>Front face</span></li>
+            <li><kbd>B</kbd><span>Back face</span></li>
+          </ul>
+          <p class="note">A letter alone is a quarter turn (90°) clockwise, looking directly at that face.</p>
+        </div>
+        <div class="card"><h3>Modifiers</h3>
+          <ul>
+            <li><kbd>R</kbd><span>Clockwise quarter turn</span></li>
+            <li><kbd>R'</kbd><span>Counter-clockwise quarter turn ("R prime")</span></li>
+            <li><kbd>R2</kbd><span>Half turn (180°), direction doesn't matter</span></li>
+          </ul>
+        </div>
+        <div class="card"><h3>Wide turns</h3>
+          <ul>
+            <li><kbd>Rw</kbd><span>Right two layers together (also written r)</span></li>
+            <li><kbd>Uw</kbd><span>Up two layers; same for Lw, Dw, Fw, Bw</span></li>
+            <li><kbd>3Rw</kbd><span>Right three layers (bigger cubes)</span></li>
+            <li><kbd>2R</kbd><span>Only the second layer from the right (bigger cubes)</span></li>
+          </ul>
+          <p class="note">A number in front says how many layers deep. Rw2 and Rw' work like R2 and R'.</p>
+        </div>
+        <div class="card"><h3>Slice moves</h3>
+          <ul>
+            <li><kbd>M</kbd><span>Middle slice, turns like L</span></li>
+            <li><kbd>E</kbd><span>Equator slice, turns like D</span></li>
+            <li><kbd>S</kbd><span>Standing slice, turns like F</span></li>
+          </ul>
+          <p class="note">These turn only the middle layer, so they apply to odd-sized cubes.</p>
+        </div>
+        <div class="card"><h3>Rotations</h3>
+          <ul>
+            <li><kbd>x</kbd><span>Rotate the whole cube like R</span></li>
+            <li><kbd>y</kbd><span>Rotate the whole cube like U</span></li>
+            <li><kbd>z</kbd><span>Rotate the whole cube like F</span></li>
+          </ul>
+          <p class="note">Only your grip changes, not the cube. x', y2 etc. work the same way.</p>
+        </div>
+        <div class="card"><h3>Example</h3>
+          <div class="alg moves">R U R' U'</div>
+          <p class="note">Turn R clockwise, U clockwise, R counter-clockwise, then U counter-clockwise.</p>
+        </div>
+      </div>
+    </section>
+
+    <div id="challenges"class="challenges chrome only-333">
       <button id="daily-btn" type="button" class="ch-btn daily"><span class="ch-ico" aria-hidden="true">☀</span><span><b>Daily scramble</b><small id="daily-sub">Same scramble for everyone today</small></span></button>
       <button id="race-btn" type="button" class="ch-btn race"><span class="ch-ico" aria-hidden="true">⚔</span><span><b>Race a friend</b><small>Same scramble, see who's faster</small></span></button>
     </div>

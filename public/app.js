@@ -738,7 +738,23 @@ function render() {
     share.title = canShare() ? 'Share solve' : 'Copy solve to clipboard';
     share.onclick = () => shareSolve(s, share);
     li.appendChild(share);
-    const del = document.createElement('button');
+    if (!isTrain() && s.scramble) {
+      const use = document.createElement('button');
+      use.textContent = '⟲';
+      use.setAttribute('aria-label', 'Use this scramble');
+      use.title = 'Use this solve\'s scramble as the current scramble';
+      use.onclick = () => {
+        if (state !== 'idle' && state !== 'stopped') return;
+        if (challenge) { challenge = null; showBanner(); }
+        closeViewer();
+        scramble = s.scramble;
+        $('scramble').innerHTML = chips(scramble);
+        hideMemoResult();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      li.appendChild(use);
+    }
+    const del =document.createElement('button');
     del.textContent = '✕';
     del.className = 'danger';
     del.setAttribute('aria-label', 'Delete solve');
@@ -1178,10 +1194,12 @@ function setMode(m) {
   if (m === 'train') m = trainSet;
   if (m !== '333' && challenge) { challenge = null; showBanner(); }
   mode = m;
-  const tab = isTrain() ? 'train' : m;
+  const tab = isTrain() ? 'train' : (m in SIZE_TAB_HASH ? '333' : m);
   document.body.dataset.mode = m;
+  const sizeSel = $('size-select');
+  if (sizeSel && /^[2-7]{3}$/.test(m)) sizeSel.value = m;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === tab)));
-  history.replaceState(null, '', { bld: '#bld', train: '#train', ...SIZE_TAB_HASH }[tab] || location.pathname);
+  history.replaceState(null, '', { bld: '#bld', train: '#train', ...SIZE_TAB_HASH }[m in SIZE_TAB_HASH ? m : tab] || location.pathname);
   timerEl.textContent = '0.00';
   setSplit('');
   $('train-last').hidden = true;
@@ -1192,7 +1210,14 @@ function setMode(m) {
   else { solves = guestSolves[m] || []; render(); }
 }
 document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setMode(b.dataset.mode); });
-const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#notation': 'notation','#train': 'train', ...SIZE_HASH })[location.hash] || '333';
+if (/^[2-7]{3}$/.test(mode)) $('size-select').value = mode;
+$('size-select').onchange = (e) => {
+  const prev = mode;
+  setMode(e.target.value);
+  if (mode !== e.target.value) e.target.value = prev; // blocked while timing
+  e.target.blur();
+};
+const modeFromHash = () => ({ '#bld': 'bld', '#leaderboard': 'board', '#notation': 'notation', '#train': 'train', ...SIZE_HASH })[location.hash] || '333';
 window.addEventListener('hashchange', () => {
   if (applyRaceLink() || applyDailyLink()) return;
   setMode(modeFromHash());

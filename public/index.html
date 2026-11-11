@@ -24,12 +24,7 @@
       <h1>cube<span>timer</span></h1>
     </div>
     <nav class="tabs" role="tablist">
-      <button role="tab" data-mode="222">2×2</button>
       <button role="tab" data-mode="333">3×3</button>
-      <button role="tab" data-mode="444">4×4</button>
-      <button role="tab" data-mode="555">5×5</button>
-      <button role="tab" data-mode="666">6×6</button>
-      <button role="tab" data-mode="777">7×7</button>
       <button role="tab" data-mode="bld">Blindfolded</button>
       <button role="tab" data-mode="train">Trainer</button>
       <button role="tab" data-mode="board">Leaderboard</button>
@@ -231,6 +226,18 @@
       </div>
       <p class="train-help">Apply the setup to a solved cube (white top, green front), then solve the case like a normal solve. The solve line is the alg for this case, including the AUFs. Slower and new cases come up more often.</p>
     </section>
+
+    <label class="size-pick only-333 chrome">
+      <span>Puzzle</span>
+      <select id="size-select" aria-label="Puzzle size">
+        <option value="222">2×2</option>
+        <option value="333">3×3</option>
+        <option value="444">4×4</option>
+        <option value="555">5×5</option>
+        <option value="666">6×6</option>
+        <option value="777">7×7</option>
+      </select>
+    </label>
 
     <div id="scramble" class="chrome moves" aria-live="polite"></div>
     <button id="new-scramble" type="button" class="chrome" title="Generate a new scramble">↻ New scramble</button>

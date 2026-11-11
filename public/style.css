@@ -142,6 +142,8 @@ button:active { transform: scale(.95); }
 button.on { background: var(--o); border-color: var(--o); color: #1a0d00; font-weight: 700; }
 button.danger:hover { border-color: var(--r); color: var(--r); background: color-mix(in srgb, var(--r) 10%, transparent); }
 
+.size-pick { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; color: var(--dim); font-size: .85rem; }
+.size-pick select { background: var(--glass); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px; font: inherit; cursor: pointer; }
 /* Mode tabs */
 body:not([data-mode="bld"]) .only-bld, body:not(:is([data-mode="333"], [data-mode="222"], [data-mode="444"], [data-mode="555"], [data-mode="666"], [data-mode="777"])) .only-333 { display: none !important; }
 body:not(:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"])) .only-train, body:is([data-mode="pll"], [data-mode="oll"], [data-mode="pll2"], [data-mode="oll2"]) .no-train { display: none !important; }

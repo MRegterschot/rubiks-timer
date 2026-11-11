@@ -46,7 +46,10 @@ function fmt(ms) {
 const eff = (s) => (s.penalty === 'DNF' ? null : s.time_ms + (s.penalty === '+2' ? 2000 : 0));
 const fmtSolve = (s) => (s.penalty === 'DNF' ? 'DNF' : fmt(eff(s)) + (s.penalty === '+2' ? '+' : ''));
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-const chips = (alg) => alg.split(' ').map((m, i) => `<span data-f="${m.match(/[A-Za-z]/)[0]}"tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${m}</span>`).join('');
+const chips = (alg) => alg.split(' ').map((m, i) => {
+  const face = (m.match(/[A-Za-z]/) || [''])[0];
+  return `<span data-f="${esc(face)}" tabindex="0" title="Show the cube after this move" style="animation-delay:${i * 18}ms">${esc(m)}</span>`;
+}).join('');
 
 // ---------- scramble ----------
 function genScramble() {

@@ -71,7 +71,33 @@ function genScramble() {
 }
 // 2×2: short random-move scramble. 4×4+: random outer and wide-layer turns (WCA-style notation: Rw, 3Rw), never
 // repeating a face within a run of turns on the same axis.
+// 2×2 states within 3 moves of solved (U/R/F turns, half turns count as one), keyed by corner stickers only.
+let nearSolved2 = null;
+const key2 = (st) => [...Array(6).keys()].flatMap((f) => [0, 2, 6, 8].map((i) => st[f * 9 + i])).join();
+function isTooEasy2(alg) {
+  if (!nearSolved2) {
+    nearSolved2 = new Set([key2(Cube.solved())]);
+    let frontier = [Cube.solved()];
+    for (let d = 0; d < 3; d++) {
+      const next = [];
+      for (const st of frontier) for (const m of ['U', "U'", 'U2', 'R', "R'", 'R2', 'F', "F'", 'F2']) {
+        const t = Cube.apply(st, m), k = key2(t);
+        if (!nearSolved2.has(k)) { nearSolved2.add(k); next.push(t); }
+      }
+      frontier = next;
+    }
+  }
+  return nearSolved2.has(key2(Cube.apply(Cube.solved(), alg)));
+}
 function genSizeScramble(n) {
+  if (n === 2) { // the scramble must need at least 4 moves to solve
+    let s;
+    do s = genSizeScramble0(2); while (isTooEasy2(s));
+    return s;
+  }
+  return genSizeScramble0(n);
+}
+function genSizeScramble0(n) {
   const faces = ['U', 'D', 'L', 'R', 'F', 'B'], axis = { U: 0, D: 0, L: 1, R: 1, F: 2, B: 2 }, mods = ['', "'", '2'];
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const use = n === 2 ? ['U', 'R', 'F'] : faces;

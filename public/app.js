@@ -948,9 +948,30 @@ function pinTimer(on) {
   document.body.classList.toggle('pinned', on);
   if (!on) timerEl.scrollIntoView({ block: 'center' });
 }
+// Keep the screen awake while inspecting/running (Screen Wake Lock API)
+let wakeLock = null;
+const needsWake = () => state === 'inspecting' || state === 'running';
+async function syncWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (needsWake() && !wakeLock && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+      if (!needsWake()) syncWakeLock(); // state changed while awaiting
+    } else if (!needsWake() && wakeLock) {
+      const wl = wakeLock;
+      wakeLock = null;
+      await wl.release();
+    }
+  } catch { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') syncWakeLock();
+});
 const setState = (s) => {
   if (['holding', 'ready', 'inspecting', 'running'].includes(s)) closeViewer();
   state = s;
+  syncWakeLock();
   document.body.dataset.state = s;
   if (s !== 'running') setMemoPhase(false);
   pinTimer(['holding', 'ready', 'inspecting', 'running'].includes(s));

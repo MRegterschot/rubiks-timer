@@ -332,7 +332,11 @@ body[data-mode="board"] .tabs button[aria-selected="true"] { color: var(--y); }
 .chart .avg { stroke: var(--b); } .chart .pbl { stroke: var(--y); }
 .chart .end { fill: var(--b); stroke: #12141b; stroke-width: 2; }
 .chart .xh { stroke: rgba(255,255,255,.35); stroke-width: 1; }
-.chart .hit { fill: transparent; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart .sel { fill: var(--b); fill-opacity: .18; stroke: var(--b); stroke-opacity: .6; pointer-events: none; }
+.zoom-reset { font: 600 11px var(--mono); color: var(--b); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; cursor: pointer; }
+.zoom-reset:hover { border-color: var(--b); }
+.chart { user-select: none; -webkit-user-select: none; }
 .chart .bar { fill: var(--g); transition: filter .1s; }
 .chart .seg-m { fill: var(--b); } .chart .seg-e { fill: var(--g); }
 .chart g.dnf { opacity: .35; }

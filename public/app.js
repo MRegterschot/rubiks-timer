@@ -326,36 +326,38 @@ function insightTiles(m, chron, s) {
 }
 
 function progressSvg(root, chron, s, w) {
-  const H = 220, L = 46, R = 14, T = 12, B = 26, n = chron.length;
-  const sorted = s.vals.filter((v) => v !== null).sort((a, b) => a - b);
-  if (n < 2 || !sorted.length) return '<p class="ins-empty">Do a couple more solves to see your progression.</p>';
+  const H = 220, L = 46, R = 14, T = 12, B = 26, N = chron.length;
+  const [a, b] = root._win ? root._win.range : [0, N - 1], n = b - a + 1;
+  const sorted = s.vals.slice(a, b + 1).filter((v) => v !== null).sort((p, q) => p - q);
+  if (N < 2 || n < 2 || !sorted.length) return '<p class="ins-empty">Do a couple more solves to see your progression.</p>';
   // Cap the y-range so one disaster solve doesn't flatten everything else
   let hi = Math.min(sorted.at(-1), sorted[Math.floor((sorted.length - 1) * 0.95)] * 1.2), lo = sorted[0];
   if (hi <= lo) hi = lo + 1000;
   const step = timeStep(hi - lo, 4), y0 = Math.floor(lo / step) * step, y1 = Math.ceil(hi / step) * step;
-  const x = (i) => L + (i * (w - L - R)) / (n - 1);
+  const x = (i) => L + ((i - a) * (w - L - R)) / (n - 1);
   const y = (v) => T + (1 - (Math.min(v, y1) - y0) / (y1 - y0)) * (H - T - B);
   let g = '';
   for (let v = y0; v <= y1 + 1; v += step) g += `<line class="grid" x1="${L}" x2="${w - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 8}" y="${y(v) + 3.5}" text-anchor="end">${fmtAxis(v)}</text>`;
   const xs = niceStep(n, Math.max(2, Math.floor((w - L - R) / 70)));
-  for (let i = 0; i < n; i += xs) g += `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${i + 1}</text>`;
+  for (let i = a; i <= b; i += xs) g += `<text class="ax" x="${x(i)}" y="${H - 6}" text-anchor="middle">${i + 1}</text>`;
   const r = n > 300 ? 1.8 : n > 80 ? 2.5 : 3.5;
-  const dots = s.vals.map((v, i) => (v === null ? '' : `<circle class="dot${v > y1 ? ' clip' : ''}" cx="${x(i)}" cy="${y(v)}" r="${r}"/>`)).join('');
+  const dots = s.vals.map((v, i) => (v === null || i < a || i > b ? '' : `<circle class="dot${v > y1 ? ' clip' : ''}" cx="${x(i)}" cy="${y(v)}" r="${r}"/>`)).join('');
   const line = (arr, stepped) => {
     let d = '', open = false;
     arr.forEach((v, i) => {
-      if (v === null) { open = false; return; }
+      if (v === null || i < a || i > b) { open = false; return; }
       d += !open ? `M${x(i)},${y(v)}` : stepped ? `H${x(i)}V${y(v)}` : `L${x(i)},${y(v)}`;
       open = true;
     });
     return d;
   };
-  const lastAvg = s.avg.findLastIndex((v) => v !== null);
+  const lastAvg = s.avg.findLastIndex((v, i) => v !== null && i <= b && i >= a);
   const end = lastAvg < 0 ? '' : `<circle class="end" cx="${x(lastAvg)}" cy="${y(s.avg[lastAvg])}" r="4.5"/>`;
-  root._prog = { x, n, L, R, w, chron, s };
-  return `<svg class="chart" width="${w}" height="${H}" role="img" aria-label="Solve times over ${n} solves">${g}${dots}
+  root._prog = { x, a, n, L, R, T, H, B, w, chron, s };
+  return `<svg class="chart" width="${w}" height="${H}" role="img" aria-label="Solve times, solves ${a + 1} to ${b + 1}">${g}${dots}
     <path class="pbl" d="${line(s.pb, true)}"/><path class="avg" d="${line(s.avg)}"/>${end}
     <line class="xh" y1="${T}" y2="${H - B}" visibility="hidden"/>
+    <rect class="sel" y="${T}" height="${H - T - B}" visibility="hidden"/>
     <rect class="hit" data-prog x="${L - 6}" y="0" width="${w - L - R + 12}" height="${H}"/></svg>`;
 }
 
@@ -432,12 +434,13 @@ function renderInsights(root, list, m) {
   root._args = [list, m];
   root._tips = [];
   root._prog = null;
+  if (root._win?.list !== list) root._win = null;
   if (!list.length) { root.innerHTML = ''; return; }
   const chron = list.slice().reverse();
   const s = series(chron, m);
   const wide = root.clientWidth >= 640;
   root.innerHTML = `<div class="ins-tiles">${insightTiles(m, chron, s)}</div>
-    <div class="card ins-chart"><div class="card-head"><h2>Progression</h2>${legend([['var(--dim)', 'solve', 'dt'], ['var(--b)', s.label], ['var(--y)', 'PB']])}</div><div class="plot" data-k="prog"></div></div>
+    <div class="card ins-chart"><div class="card-head"><h2>Progression</h2><button type="button" class="zoom-reset"${root._win ? '' : ' hidden'}>Reset zoom</button>${legend([['var(--dim)', 'solve', 'dt'], ['var(--b)', s.label], ['var(--y)', 'PB']])}</div><div class="plot" data-k="prog"></div></div>
     <div class="ins-grid${wide ? ' two' : ''}">
       <div class="card ins-chart"><div class="card-head"><h2>${m === 'bld' ? 'Memo vs exec' : 'Distribution'}</h2>${m === 'bld' ? legend([['var(--b)', 'memo', 'sq'], ['var(--g)', 'exec', 'sq'], ['var(--dim)', 'faded = DNF', 'sq dim']]) : ''}</div><div class="plot" data-k="${m === 'bld' ? 'memo' : 'hist'}"></div></div>
       <div class="card ins-chart"><div class="card-head"><h2>Activity</h2><div class="legend heat">less${[0, 1, 2, 3, 4].map((l) => `<i class="lv${l}"></i>`).join('')}more</div></div><div class="plot" data-k="act"></div></div>
@@ -463,8 +466,35 @@ function hideTip(root) {
   root.querySelector('.xh')?.setAttribute('visibility', 'hidden');
   root.querySelector('.hover')?.classList.remove('hover');
 }
+const progIndex = (p, svgX) => p.a + Math.max(0, Math.min(p.n - 1, Math.round(((svgX - p.L) / (p.w - p.L - p.R)) * (p.n - 1))));
+// Drag across the progression graph (mouse or touch) to zoom into that range of solves
+function onProgDrag(root, e) {
+  const d = root._drag, p = root._prog;
+  if (!d || !p || e.pointerId !== d.id) return;
+  const svgX = e.clientX - d.left;
+  if (e.type === 'pointermove') {
+    if (!d.on && Math.abs(svgX - d.x0) < 8) return;
+    d.on = true;
+    hideTip(root);
+    const sel = root.querySelector('.sel'), lo = Math.max(p.L, Math.min(d.x0, svgX)), hi = Math.min(p.w - p.R, Math.max(d.x0, svgX));
+    sel.setAttribute('x', lo); sel.setAttribute('width', Math.max(0, hi - lo)); sel.setAttribute('visibility', 'visible');
+    return;
+  }
+  root._drag = null;
+  root.querySelector('.sel')?.setAttribute('visibility', 'hidden');
+  if (e.type !== 'pointerup' || !d.on) return;
+  const i0 = progIndex(p, Math.min(d.x0, svgX)), i1 = progIndex(p, Math.max(d.x0, svgX));
+  if (i1 - i0 < 1) return;
+  root._win = { list: root._args[0], range: [i0, i1] };
+  renderInsights(root, ...root._args);
+}
 function onInsightPointer(e) {
   const root = e.currentTarget;
+  if (root._drag?.on) return;
+  if (e.type === 'pointerdown' && e.target.matches?.('[data-prog]') && e.isPrimary && (e.pointerType !== 'mouse' || e.button === 0)) {
+    root._drag = { id: e.pointerId, x0: e.clientX - e.target.ownerSVGElement.getBoundingClientRect().left, left: e.target.ownerSVGElement.getBoundingClientRect().left, on: false };
+    e.target.setPointerCapture?.(e.pointerId);
+  }
   const hit = e.target.closest?.('[data-t], [data-prog]');
   root.querySelector('.hover')?.classList.remove('hover');
   if (!hit) { hideTip(root); return; }
@@ -475,7 +505,7 @@ function onInsightPointer(e) {
   }
   // Crosshair snaps to the nearest solve
   const p = root._prog, svgX = e.clientX - hit.ownerSVGElement.getBoundingClientRect().left;
-  const i = Math.max(0, Math.min(p.n - 1, Math.round(((svgX - p.L) / (p.w - p.L - p.R)) * (p.n - 1))));
+  const i = progIndex(p, svgX);
   const xh = root.querySelector('.xh');
   xh.setAttribute('x1', p.x(i)); xh.setAttribute('x2', p.x(i)); xh.setAttribute('visibility', 'visible');
   const sv = p.chron[i], f = (v) => (v === null ? '-' : fmt(v));
@@ -485,7 +515,13 @@ for (const id of ['insights', 'profile-insights']) {
   const root = $(id);
   root.addEventListener('pointermove', onInsightPointer);
   root.addEventListener('pointerdown', onInsightPointer);
-  root.addEventListener('pointerleave', () => hideTip(root));
+  root.addEventListener('pointerleave', () => { if (!root._drag?.on) hideTip(root); });
+  for (const t of ['pointermove', 'pointerup', 'pointercancel']) root.addEventListener(t, (e) => onProgDrag(root, e));
+  root.addEventListener('click', (e) => {
+    if (!e.target.closest?.('.zoom-reset')) return;
+    root._win = null;
+    renderInsights(root, ...root._args);
+  });
 }
 let resizeT = 0;
 window.addEventListener('resize', () => {
